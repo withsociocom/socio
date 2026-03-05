@@ -87,10 +87,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: SITE_URL,
   },
-  icons: {
-    icon: "/favicon.svg",
-    apple: "/favicon.svg",
-  },
   manifest: "/manifest.json",
   category: "education",
 };
@@ -276,8 +272,6 @@ export default async function RootLayout({
       <head>
         <OrganizationJsonLd />
         <WebsiteJsonLd />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
