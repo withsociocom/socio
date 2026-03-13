@@ -230,7 +230,7 @@ const Page = () => {
                     <button
                       type="button"
                       title="Fest = a group of related events"
-                      className="bg-[#154CB3] cursor-pointer text-white text-sm py-3 px-4 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] transition-colors"
+                      className="bg-[#154CB3] cursor-pointer text-white text-sm py-3 px-4 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] transition-all"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -253,7 +253,7 @@ const Page = () => {
                     <button
                       type="button"
                       title="Event = a single activity users register for"
-                      className="bg-[#154CB3] cursor-pointer text-white text-sm py-3 px-4 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] transition-colors"
+                      className="bg-[#154CB3] cursor-pointer text-white text-sm py-3 px-4 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] transition-all"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -279,7 +279,7 @@ const Page = () => {
                   <button
                     type="button"
                     title="Fest = a group of related events"
-                    className="bg-[#154CB3] cursor-pointer text-white text-xs py-2 px-3 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] transition-colors"
+                    className="bg-[#154CB3] cursor-pointer text-white text-xs py-2 px-3 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] hover:-translate-y-0.5 active:scale-[0.98] transition-all"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -302,7 +302,7 @@ const Page = () => {
                   <button
                     type="button"
                     title="Event = a single activity users register for"
-                    className="bg-[#154CB3] cursor-pointer text-white text-xs py-2 px-3 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] transition-colors"
+                    className="bg-[#154CB3] cursor-pointer text-white text-xs py-2 px-3 rounded-full font-medium flex items-center hover:bg-[#154cb3eb] hover:-translate-y-0.5 active:scale-[0.98] transition-all"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -348,16 +348,41 @@ const Page = () => {
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-[#154CB3] focus:border-transparent"
                 />
               </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#154CB3]/10 text-[#154CB3]">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M5 7l1 12h12l1-12M9 11v6m6-6v6" /></svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Fest</p>
+                      <p className="text-sm text-gray-600">A group of related events under one theme.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#154CB3]/10 text-[#154CB3]">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v11a2 2 0 002 2z" /></svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Event</p>
+                      <p className="text-sm text-gray-600">A single activity people can register for.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Toggle Buttons */}
-          <div className="flex gap-3 mb-8 border-b border-gray-200">
+          <div className="flex gap-2 mb-8 bg-gray-100 p-1 rounded-full w-fit border border-gray-200">
             <button
               onClick={() => setActiveTab("fests")}
-              className={`pb-3 px-1 font-semibold text-lg transition-all ${
+              className={`px-4 py-2 font-semibold text-sm sm:text-base rounded-full transition-all ${
                 activeTab === "fests"
-                  ? "text-[#154CB3] border-b-2 border-[#154CB3]"
+                  ? "text-[#154CB3] bg-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -365,9 +390,9 @@ const Page = () => {
             </button>
             <button
               onClick={() => setActiveTab("events")}
-              className={`pb-3 px-1 font-semibold text-lg transition-all ${
+              className={`px-4 py-2 font-semibold text-sm sm:text-base rounded-full transition-all ${
                 activeTab === "events"
-                  ? "text-[#154CB3] border-b-2 border-[#154CB3]"
+                  ? "text-[#154CB3] bg-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -375,9 +400,9 @@ const Page = () => {
             </button>
             <button
               onClick={() => setActiveTab("report")}
-              className={`pb-3 px-1 font-semibold text-lg transition-all ${
+              className={`px-4 py-2 font-semibold text-sm sm:text-base rounded-full transition-all ${
                 activeTab === "report"
-                  ? "text-[#154CB3] border-b-2 border-[#154CB3]"
+                  ? "text-[#154CB3] bg-white shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
@@ -396,21 +421,22 @@ const Page = () => {
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
                     {paginatedFests.items.map((fest) => (
-                      <FestCard
-                        key={fest.fest_id}
-                        id={fest.fest_id}
-                        title={fest.fest_title}
-                        dept={fest.organizing_dept}
-                        description={fest.description}
-                        dateRange={`${formatDate(fest.opening_date)} - ${formatDate(
-                          fest.closing_date
-                        )}`}
-                        image={
-                          fest.fest_image_url ||
-                          "https://placehold.co/400x250/e2e8f0/64748b?text=No+Image"
-                        }
-                        baseUrl="edit/fest"
-                      />
+                      <div key={fest.fest_id} className="transition-all duration-300 hover:-translate-y-1 hover:drop-shadow-lg">
+                        <FestCard
+                          id={fest.fest_id}
+                          title={fest.fest_title}
+                          dept={fest.organizing_dept}
+                          description={fest.description}
+                          dateRange={`${formatDate(fest.opening_date)} - ${formatDate(
+                            fest.closing_date
+                          )}`}
+                          image={
+                            fest.fest_image_url ||
+                            "https://placehold.co/400x250/e2e8f0/64748b?text=No+Image"
+                          }
+                          baseUrl="edit/fest"
+                        />
+                      </div>
                     ))}
                   </div>
                   {paginatedFests.totalPages > 1 && (
@@ -458,23 +484,24 @@ const Page = () => {
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
                     {paginatedEvents.items.map((event) => (
-                      <EventCard
-                        key={event.id}
-                        idForLink={event.event_id}
-                        title={event.title}
-                        festName={event.fest || ""}
-                        dept={event.organizing_dept || "N/A"}
-                        date={formatDate(event.event_date)}
-                        time={formatTimeStr(event.event_time)}
-                        location={event.venue || "TBD"}
-                        tags={getDisplayTagsForEvent(event)}
-                        image={
-                          event.event_image_url ||
-                          "https://placehold.co/400x250/e2e8f0/64748b?text=No+Image"
-                        }
-                        baseUrl="edit/event"
-                        authToken={authToken || undefined}
-                      />
+                      <div key={event.id} className="transition-all duration-300 hover:-translate-y-1 hover:drop-shadow-lg">
+                        <EventCard
+                          idForLink={event.event_id}
+                          title={event.title}
+                          festName={event.fest || ""}
+                          dept={event.organizing_dept || "N/A"}
+                          date={formatDate(event.event_date)}
+                          time={formatTimeStr(event.event_time)}
+                          location={event.venue || "TBD"}
+                          tags={getDisplayTagsForEvent(event)}
+                          image={
+                            event.event_image_url ||
+                            "https://placehold.co/400x250/e2e8f0/64748b?text=No+Image"
+                          }
+                          baseUrl="edit/event"
+                          authToken={authToken || undefined}
+                        />
+                      </div>
                     ))}
                   </div>
                   {paginatedEvents.totalPages > 1 && (

@@ -750,18 +750,45 @@ export default function MasterAdminPage() {
           <div className="flex items-center gap-2">
             <a
               href="/create/fest"
-              className="inline-flex items-center gap-2 bg-[#154CB3] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-[#154cb3eb] transition-colors"
+              className="inline-flex items-center gap-2 bg-[#154CB3] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-[#154cb3eb] hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] transition-all"
+              title="Fest = group of related events"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               Create fest
             </a>
             <a
               href="/create/event"
-              className="inline-flex items-center gap-2 bg-[#154CB3] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-[#154cb3eb] transition-colors"
+              className="inline-flex items-center gap-2 bg-[#154CB3] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-[#154cb3eb] hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] transition-all"
+              title="Event = single activity users register for"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               Create event
             </a>
+          </div>
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="group bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#154CB3]/10 text-[#154CB3]">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M5 7l1 12h12l1-12M9 11v6m6-6v6" /></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Fest</p>
+                <p className="text-sm text-gray-600">A themed collection that groups multiple related events.</p>
+              </div>
+            </div>
+          </div>
+          <div className="group bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#154CB3]/10 text-[#154CB3]">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v11a2 2 0 002 2z" /></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Event</p>
+                <p className="text-sm text-gray-600">A single session or activity that users can register for.</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1260,7 +1287,7 @@ export default function MasterAdminPage() {
                         {paginatedEvents.items.map((event) => {
                           const status = getEventStatus(event.event_date);
                           return (
-                            <tr key={event.event_id} className="hover:bg-gray-50 transition-colors">
+                            <tr key={event.event_id} className="hover:bg-gray-50 transition-all duration-200">
                               <td className="px-6 py-4">
                                 <div className="font-semibold text-gray-900">{event.title}</div>
                                 <div className="text-xs text-gray-400 mt-0.5">ID: {event.event_id.slice(0, 8)}…</div>
@@ -1279,7 +1306,8 @@ export default function MasterAdminPage() {
                                 })}
                               </td>
                               <td className="px-6 py-4">
-                                <span className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800">
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-green-600"></span>
                                   {event.registration_count || 0}
                                 </span>
                               </td>
@@ -1288,19 +1316,19 @@ export default function MasterAdminPage() {
                                 <div className="flex items-center justify-end gap-2">
                                   <a
                                     href={`/edit/event/${event.event_id}`}
-                                    className="px-3 py-1.5 bg-[#154CB3] text-white text-xs font-medium rounded-lg hover:bg-[#154cb3df] transition-colors"
+                                    className="px-3 py-1.5 bg-[#154CB3] text-white text-xs font-medium rounded-lg hover:bg-[#154cb3df] hover:-translate-y-0.5 transition-all"
                                   >
                                     Edit
                                   </a>
                                   <a
                                     href={`/event/${event.event_id}`}
-                                    className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                                    className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 hover:-translate-y-0.5 transition-all"
                                   >
                                     View
                                   </a>
                                   <button
                                     onClick={() => setShowDeleteEventConfirm(event.event_id)}
-                                    className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
+                                    className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 hover:-translate-y-0.5 transition-all"
                                   >
                                     Delete
                                   </button>
@@ -1392,7 +1420,7 @@ export default function MasterAdminPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {paginatedFests.items.map((fest) => (
-                          <tr key={fest.fest_id} className="hover:bg-gray-50 transition-colors">
+                          <tr key={fest.fest_id} className="hover:bg-gray-50 transition-all duration-200">
                             <td className="px-6 py-4">
                               <div className="font-semibold text-gray-900">{fest.fest_title}</div>
                               <div className="text-sm text-gray-500">ID: {fest.fest_id}</div>
@@ -1406,7 +1434,8 @@ export default function MasterAdminPage() {
                               })}
                             </td>
                             <td className="px-6 py-4">
-                              <span className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800">
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-600"></span>
                                 {fest.registration_count || 0} Registered
                               </span>
                             </td>
@@ -1415,19 +1444,19 @@ export default function MasterAdminPage() {
                               <div className="flex items-center justify-end gap-2">
                                 <a
                                   href={`/edit/fest/${fest.fest_id}`}
-                                  className="px-4 py-2 bg-[#154CB3] text-white text-sm font-medium rounded-lg hover:bg-[#154cb3df] transition-colors"
+                                  className="px-4 py-2 bg-[#154CB3] text-white text-sm font-medium rounded-lg hover:bg-[#154cb3df] hover:-translate-y-0.5 transition-all"
                                 >
                                   Edit
                                 </a>
                                 <a
                                   href={`/fest/${fest.fest_id}`}
-                                  className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                                  className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 hover:-translate-y-0.5 transition-all"
                                 >
                                   View
                                 </a>
                                 <button
                                   onClick={() => setShowDeleteFestConfirm(fest.fest_id)}
-                                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 hover:-translate-y-0.5 transition-all"
                                 >
                                   Delete
                                 </button>
