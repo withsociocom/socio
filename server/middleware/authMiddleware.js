@@ -114,15 +114,19 @@ export const getUserInfo = () => {
   return async (req, res, next) => {
     try {
       if (!req.userId) {
+        console.warn('[UserInfo] ❌ No req.userId set by previous middleware');
         return res.status(401).json({ error: 'User not authenticated' });
       }
 
+      console.log(`[UserInfo] 🔍 Fetching user info for UUID: ${req.userId}`);
       const user = await queryOne('users', { where: { auth_uuid: req.userId } });
 
       if (!user) {
+        console.warn(`[UserInfo] ❌ User not found in database for UUID: ${req.userId}`);
         return res.status(404).json({ error: 'User not found in database' });
       }
 
+      console.log(`[UserInfo] ✅ Found user: ${user.email}`);
       req.userInfo = user;
       next();
     } catch (error) {
@@ -384,6 +388,7 @@ export const requireAdminIP = (req, res, next) => {
 
   // Clean up IPv6-mapped IPv4 addresses
   const normalizedIp = clientIp.startsWith('::ffff:') ? clientIp.substring(7) : clientIp;
+  console.log(`[IPRestriction] 🔍 Checking IP: ${normalizedIp} against [${allowedIps.join(', ')}]`);
 
   if (!allowedIps.includes(normalizedIp) && !allowedIps.includes(clientIp)) {
     console.warn(`[IPRestriction] ❌ Access denied for IP: ${normalizedIp} (Raw: ${clientIp})`);

@@ -84,7 +84,24 @@ function mapNotification(n, userStatus = null) {
 // Returns ALL notifications (broadcasts + individual) for the admin panel.
 // Sorted by created_at desc. No per-user filtering.
 
-router.get("/notifications/admin/history", async (req, res) => {
+router.get("/notifications/admin/history", (req, res, next) => {
+  const allowedIps = (process.env.ADMIN_ALLOWED_IPS || '127.0.0.1,::1').split(',').map(ip => ip.trim());
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || req.ip;
+  const normalizedIp = clientIp.startsWith('::ffff:') ? clientIp.substring(7) : clientIp;
+
+  if (allowedIps.includes(normalizedIp) || allowedIps.includes(clientIp)) {
+    return next();
+  }
+  
+  return authenticateUser(req, res, () => {
+    getUserInfo()(req, res, () => {
+      checkRoleExpiration(req, res, () => {
+        if (req.userInfo?.is_masteradmin) return next();
+        return res.status(403).json({ error: "Master Admin privileges required" });
+      });
+    });
+  });
+}, async (req, res) => {
   try {
     const { data: notifications, error } = await supabase
       .from('notifications')
@@ -118,7 +135,24 @@ router.get("/notifications/admin/history", async (req, res) => {
 // ─── ADMIN: BROADCAST NOTIFICATION (via API) ─────────────────────────────────────
 // POST endpoint to let the admin panel send broadcasts without importing the function.
 
-router.post("/notifications/broadcast", async (req, res) => {
+router.post("/notifications/broadcast", (req, res, next) => {
+  const allowedIps = (process.env.ADMIN_ALLOWED_IPS || '127.0.0.1,::1').split(',').map(ip => ip.trim());
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || req.ip;
+  const normalizedIp = clientIp.startsWith('::ffff:') ? clientIp.substring(7) : clientIp;
+
+  if (allowedIps.includes(normalizedIp) || allowedIps.includes(clientIp)) {
+    return next();
+  }
+  
+  return authenticateUser(req, res, () => {
+    getUserInfo()(req, res, () => {
+      checkRoleExpiration(req, res, () => {
+        if (req.userInfo?.is_masteradmin) return next();
+        return res.status(403).json({ error: "Master Admin privileges required" });
+      });
+    });
+  });
+}, async (req, res) => {
   try {
     const { title, message, type = 'info', event_id, event_title, action_url } = req.body;
 

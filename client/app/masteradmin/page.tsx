@@ -370,14 +370,22 @@ export default function MasterAdminPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch users");
+        let errorMessage = "Failed to fetch users";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          // Fallback to generic status text
+          errorMessage = `${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       setUsers(data.users || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching users:", error);
-      toast.error("Failed to load users. Check console for details.");
+      toast.error(`Failed to load users: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
