@@ -41,6 +41,6 @@ desktop.ini
 *.swn
 
 # Database dumps and misc
-*.sql
-InternsNDA.tex
-pitch-deck.html
+# sociows.sql - Tracking as per user request
+# InternsNDA.tex - Tracking as per user request
+# pitch-deck.html - Tracking as per user request
