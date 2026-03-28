@@ -445,6 +445,8 @@ export default function MasterAdminPage() {
             }
           });
         }
+      } else {
+        toast.error("Failed to fetch registration counts");
       }
 
       // Add registration counts to events

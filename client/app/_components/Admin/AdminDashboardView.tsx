@@ -73,7 +73,7 @@ interface Registration {
   teammates?: any[];
 }
 
-type DateRange = "7d" | "30d" | "90d" | "1y";
+type DateRange = "7d" | "30d" | "90d" | "1y" | "all";
 type ChartTab = "registrations" | "events" | "department";
 
 interface Props {
@@ -90,9 +90,10 @@ const ROLE_COLORS = ["#154cb3", "#10b981", "#f59e0b", "#8b5cf6"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getDateCutoff(range: DateRange): Date {
+  if (range === "all") return new Date(0); // Epoch
   const now = new Date();
-  const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
-  return new Date(now.getTime() - days[range] * 86400000);
+  const days: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+  return new Date(now.getTime() - (days[range] || 0) * 86400000);
 }
 
 function formatTimeAgo(date: Date): string {
@@ -167,9 +168,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminDashboardView({ users, events, fests, registrations }: Props) {
-  const [dateRange, setDateRange] = useState<DateRange>("7d");
+  const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [chartTab, setChartTab] = useState<ChartTab>("registrations");
   const [campusFilter, setCampusFilter] = useState("all");
+  const [deptFilter, setDeptFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showExport, setShowExport] = useState(false);
@@ -184,26 +186,31 @@ export default function AdminDashboardView({ users, events, fests, registrations
   const cutoff = useMemo(() => (startDate ? new Date(startDate) : getDateCutoff(dateRange)), [dateRange, startDate]);
   const endCutoff = useMemo(() => (endDate ? new Date(endDate) : null), [endDate]);
   const prevCutoff = useMemo(() => {
-    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, "all": 3650 };
     const d = days[dateRange];
     const now = new Date();
     return { start: new Date(now.getTime() - 2 * d * 86400000), end: cutoff };
   }, [dateRange, cutoff]);
 
   const campuses = useMemo(() => Array.from(new Set(users.map((u) => u.campus).filter(Boolean) as string[])).sort(), [users]);
+  const allDepts = useMemo(() => Array.from(new Set(events.map((e) => e.organizing_dept).filter(Boolean) as string[])).sort(), [events]);
 
   // Filtered data
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
       const d = new Date(e.created_at);
       const ok = d >= cutoff && (!endCutoff || d <= endCutoff);
-      if (campusFilter !== "all") {
+      
+      const matchCampus = campusFilter === "all" || (() => {
         const campusUsers = new Set(users.filter((u) => u.campus === campusFilter).map((u) => u.email));
-        return ok && campusUsers.has(e.created_by);
-      }
-      return ok;
+        return campusUsers.has(e.created_by);
+      })();
+
+      const matchDept = deptFilter === "all" || e.organizing_dept === deptFilter;
+
+      return ok && matchCampus && matchDept;
     });
-  }, [events, cutoff, endCutoff, campusFilter, users]);
+  }, [events, cutoff, endCutoff, campusFilter, deptFilter, users]);
 
   const filteredRegs = useMemo(
     () => registrations.filter((r) => new Date(r.created_at) >= cutoff && (!endCutoff || new Date(r.created_at) <= endCutoff)),
@@ -248,7 +255,7 @@ export default function AdminDashboardView({ users, events, fests, registrations
 
   // Area chart data (daily for 7d, weekly for 30d+)
   const areaData = useMemo(() => {
-    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 52 };
+    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 52, "all": 52 };
     const bucketCount = days[dateRange];
     const isWeekly = dateRange !== "7d";
     const now = new Date();
@@ -352,7 +359,7 @@ export default function AdminDashboardView({ users, events, fests, registrations
 
   const dateRangeLabel = () => {
     const n = new Date();
-    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+    const days: Record<DateRange, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, "all": 3650 };
     const start = new Date(n.getTime() - days[dateRange] * 86400000);
     return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${n.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   };
@@ -408,7 +415,13 @@ export default function AdminDashboardView({ users, events, fests, registrations
       {/* ── Header Row ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Admin Overview</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Admin Overview</h1>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Live DB Connected</span>
+            </div>
+          </div>
           <p className="text-sm text-slate-500 mt-0.5">{today}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -431,7 +444,7 @@ export default function AdminDashboardView({ users, events, fests, registrations
       <div className="flex flex-wrap items-center gap-2">
         {/* Period toggles */}
         <div className="flex items-center bg-slate-100 rounded-lg p-1 gap-0.5">
-          {(["7d", "30d", "90d", "1y"] as DateRange[]).map((r) => (
+          {(["7d", "30d", "90d", "1y", "all"] as DateRange[]).map((r) => (
             <button
               key={r}
               onClick={() => { setDateRange(r); setStartDate(""); setEndDate(""); }}
@@ -456,10 +469,24 @@ export default function AdminDashboardView({ users, events, fests, registrations
           <select
             value={campusFilter}
             onChange={(e) => setCampusFilter(e.target.value)}
-            className="text-xs text-slate-600 bg-transparent outline-none appearance-none pr-4"
+            className="text-[11px] text-slate-600 bg-transparent outline-none appearance-none pr-4"
           >
             <option value="all">All Campuses</option>
             {campuses.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <ChevronDown className="w-3 h-3 text-slate-400 -ml-3" />
+        </div>
+
+        {/* Dept dropdown */}
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer">
+          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <select
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+            className="text-[11px] text-slate-600 bg-transparent outline-none appearance-none pr-4"
+          >
+            <option value="all">All Departments</option>
+            {allDepts.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
           <ChevronDown className="w-3 h-3 text-slate-400 -ml-3" />
         </div>
