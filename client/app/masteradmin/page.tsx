@@ -16,6 +16,7 @@ import {
   Trophy,
   Bell,
   BarChart2,
+  LineChart,
   Settings,
   UserCog,
   Eye,
@@ -112,7 +113,9 @@ const ACCREDITATION_BODIES = [
 export default function MasterAdminPage() {
   const { userData, isMasterAdmin, isLoading: authLoading, session } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "events" | "fests" | "notifications" | "report" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "insights" | "users" | "events" | "fests" | "notifications" | "report" | "settings"
+  >("dashboard");
   const authToken = session?.access_token || null;
 
   // Helper to get a fresh access token (avoids stale token from session state)
@@ -192,7 +195,7 @@ export default function MasterAdminPage() {
       fetchEvents();
     } else if (activeTab === "fests") {
       fetchFests();
-    } else if (activeTab === "dashboard") {
+    } else if (activeTab === "dashboard" || activeTab === "insights") {
       fetchDashboardData();
     } else if (activeTab === "notifications") {
       // Ensure users/events are loaded for the notification composer
@@ -774,6 +777,7 @@ export default function MasterAdminPage() {
   // ── Sidebar nav config ──
   const sidebarNav = [
     { id: "dashboard" as const, label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: "insights" as const, label: "Insights", icon: <LineChart className="w-4 h-4" /> },
     { id: "events" as const, label: "Events", icon: <CalendarDays className="w-4 h-4" />, count: events.length },
     { id: "fests" as const, label: "Fests", icon: <Trophy className="w-4 h-4" />, count: fests.length },
     { id: "notifications" as const, label: "Notifications", icon: <Bell className="w-4 h-4" /> },
@@ -859,6 +863,7 @@ export default function MasterAdminPage() {
                 events={events}
                 fests={fests}
                 registrations={registrations}
+                onViewPerformanceInsights={() => setActiveTab("insights")}
               />
             )}
           </div>
@@ -867,6 +872,32 @@ export default function MasterAdminPage() {
         {/* Non-dashboard tabs get padding wrapper */}
         {activeTab !== "dashboard" && (
           <div className="p-6 space-y-6">
+        {/* Performance Insights Tab */}
+        {activeTab === "insights" && (
+          <div className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Performance Insights</h2>
+              <p className="text-sm text-gray-500 mb-0">
+                Deep analytics with filters, trends, top performers, role and pricing distributions, and CSV exports.
+              </p>
+            </div>
+
+            {isLoading ? (
+              <div className="p-12 text-center bg-white border border-gray-200 rounded-2xl">
+                <div className="w-12 h-12 border-4 border-[#154CB3] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <div className="text-gray-600">Loading performance insights...</div>
+              </div>
+            ) : (
+              <AnalyticsDashboard
+                users={users}
+                events={events}
+                fests={fests}
+                registrations={registrations}
+              />
+            )}
+          </div>
+        )}
+
         {/* Settings placeholder */}
         {activeTab === "settings" && (
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400">

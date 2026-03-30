@@ -92,6 +92,7 @@ interface Props {
   events: Event[];
   fests: Fest[];
   registrations: Registration[];
+  onViewPerformanceInsights?: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -187,7 +188,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function AdminDashboardView({ users, events, fests, registrations }: Props) {
+export default function AdminDashboardView({
+  users,
+  events,
+  fests,
+  registrations,
+  onViewPerformanceInsights,
+}: Props) {
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [chartTab, setChartTab] = useState<ChartTab>("registrations");
   const [campusFilter, setCampusFilter] = useState("all");
@@ -800,7 +807,17 @@ export default function AdminDashboardView({ users, events, fests, registrations
                 ))
               )}
             </div>
-            <button className="w-full mt-3 text-xs text-[#154cb3] font-medium hover:underline text-center pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onViewPerformanceInsights}
+              disabled={!onViewPerformanceInsights}
+              className={`w-full mt-3 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-center pt-2 border-t border-slate-100 ${
+                onViewPerformanceInsights
+                  ? "text-[#154cb3] hover:underline"
+                  : "text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
               View performance insights
             </button>
           </div>
