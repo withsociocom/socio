@@ -10,7 +10,7 @@ DROP TABLE IF EXISTS qr_scan_logs CASCADE;
 DROP TABLE IF EXISTS attendance_status CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS registrations CASCADE;
-DROP TABLE IF EXISTS fest CASCADE;
+DROP TABLE IF EXISTS fests CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
@@ -77,7 +77,7 @@ CREATE TABLE events (
 );
 
 -- Fest table (singular)
-CREATE TABLE fest (
+CREATE TABLE fests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fest_id TEXT UNIQUE NOT NULL,
   fest_title TEXT NOT NULL,
@@ -160,7 +160,7 @@ CREATE INDEX idx_registrations_user_email ON registrations(user_email);
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fest ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE registrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
@@ -170,7 +170,7 @@ ALTER TABLE qr_scan_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all access to users" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to contact_messages" ON contact_messages FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to events" ON events FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to fest" ON fest FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to fest" ON fests FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to registrations" ON registrations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to attendance_status" ON attendance_status FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to notifications" ON notifications FOR ALL USING (true) WITH CHECK (true);
@@ -219,9 +219,9 @@ ON registrations(team_leader_register_number) WHERE team_leader_register_number 
 -- ===== File: migrate-fest-auth-uuid.sql =====
 
 -- Add auth_uuid column to fest table for ownership tracking
-ALTER TABLE fest ADD COLUMN IF NOT EXISTS auth_uuid UUID;
+ALTER TABLE fests ADD COLUMN IF NOT EXISTS auth_uuid UUID;
 
-ALTER TABLE fest ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE fests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_fest_auth_uuid ON fest(auth_uuid);
 
@@ -336,7 +336,7 @@ CREATE TABLE public.events (
   outsider_max_participants integer,
   CONSTRAINT events_pkey PRIMARY KEY (event_id)
 );
-CREATE TABLE public.fest (
+CREATE TABLE public.fests (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   fest_title text NOT NULL,
@@ -428,3 +428,6 @@ ALTER TABLE events
 ALTER TABLE fest
   ADD COLUMN IF NOT EXISTS campus_hosted_at TEXT,
   ADD COLUMN IF NOT EXISTS allowed_campuses JSON DEFAULT '[]';
+
+-- Migration for ADV-02
+ALTER TABLE IF EXISTS public.fest RENAME TO fests;

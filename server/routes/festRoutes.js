@@ -2,12 +2,12 @@ import express from "express";
 import { getPathFromStorageUrl, deleteFileFromLocal } from "../utils/fileUtils.js";
 import { v4 as uuidv4 } from "uuid";
 import { queryAll, queryOne, insert, update, remove } from "../config/database.js";
-import { 
-  authenticateUser, 
-  getUserInfo, 
+import {
+  authenticateUser,
+  getUserInfo,
   checkRoleExpiration,
-  requireOrganiser, 
-  requireOwnership 
+  requireOrganiser,
+  requireOwnership
 } from "../middleware/authMiddleware.js";
 import { sendBroadcastNotification } from "./notificationRoutes.js";
 import { pushFestToGated, isGatedEnabled } from "../utils/gatedSync.js";
@@ -54,12 +54,12 @@ const mapFestResponse = (fest) => {
 router.get("/", async (req, res) => {
   try {
     console.log("Fetching all fests...");
-  const fests = await queryAll("fest", {
+    const fests = await queryAll("fests", {
       order: { column: "created_at", ascending: false }
     });
-    
+
     console.log(`Found ${fests?.length || 0} fests`);
-    
+
     const processedFests = (fests || []).map(mapFestResponse);
     // OPTIMIZATION: Cache for 5 minutes, allow stale content for 1 hour
     res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
@@ -67,9 +67,9 @@ router.get("/", async (req, res) => {
   } catch (error) {
     console.error("Error fetching fests:", error);
     console.error("Error details:", error.message, error.stack);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Internal server error while fetching fests.",
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -84,7 +84,7 @@ router.get("/:festId", async (req, res) => {
       });
     }
 
-  const fest = await queryOne("fest", { where: { fest_id: festSlug } });
+    const fest = await queryOne("fests", { where: { fest_id: festSlug } });
 
     if (!fest) {
       return res.status(404).json({ error: `Fest with ID (slug) '${festSlug}' not found.` });
@@ -106,133 +106,133 @@ router.post(
   getUserInfo(),
   requireOrganiser,
   async (req, res) => {
-  try {
-    const festData = req.body;
+    try {
+      const festData = req.body;
 
-    // Basic validation
-    const title = festData.festTitle || festData.title;
-    const dept = festData.organizingDept || festData.organizing_dept;
+      // Basic validation
+      const title = festData.festTitle || festData.title;
+      const dept = festData.organizingDept || festData.organizing_dept;
 
-    if (!title || !dept) {
-      console.log("Validation failed. Received:", JSON.stringify(festData));
-      return res.status(400).json({ error: "Fest title and organizing department are required" });
-    }
+      if (!title || !dept) {
+        console.log("Validation failed. Received:", JSON.stringify(festData));
+        return res.status(400).json({ error: "Fest title and organizing department are required" });
+      }
 
-    // Generate slug-based ID from title
-    const titleForSlug = festData.festTitle || festData.title || "";
-    let fest_id = titleForSlug
-      ? titleForSlug
+      // Generate slug-based ID from title
+      const titleForSlug = festData.festTitle || festData.title || "";
+      let fest_id = titleForSlug
+        ? titleForSlug
           .toLowerCase()
           .trim()
           .replace(/[^\w\s-]/g, "")
           .replace(/[\s_-]+/g, "-")
           .replace(/^-+|-+$/g, "")
-      : "";
+        : "";
 
-    if (!fest_id) {
-      fest_id = uuidv4().replace(/-/g, "");
-    }
+      if (!fest_id) {
+        fest_id = uuidv4().replace(/-/g, "");
+      }
 
-    // Validate fest_id uniqueness
-    const existingFest = await queryOne("fest", { where: { fest_id } });
-    if (existingFest) {
-      return res.status(400).json({
-        error: `A fest with the title "${title}" already exists (ID: '${fest_id}'). Please use a different title.`
-      });
-    }
+      // Validate fest_id uniqueness
+      const existingFest = await queryOne("fests", { where: { fest_id } });
+      if (existingFest) {
+        return res.status(400).json({
+          error: `A fest with the title "${title}" already exists (ID: '${fest_id}'). Please use a different title.`
+        });
+      }
 
-    // Proceed with insertion
-    const festPayload = {
-      fest_id,
-      fest_title: festData.festTitle || festData.title || "",
-      description: festData.description || festData.detailed_description || festData.detailedDescription || "",
-      opening_date: festData.openingDate || festData.opening_date || null,
-      closing_date: festData.closingDate || festData.closing_date || null,
-      fest_image_url: festData.festImageUrl || festData.fest_image_url || null,
-      organizing_dept: festData.organizingDept || festData.organizing_dept || "",
-      department_access: festData.departmentAccess || festData.department_access || [],
-      category: festData.category || "",
-      contact_email: festData.contactEmail || festData.contact_email || "",
-      contact_phone: festData.contactPhone || festData.contact_phone || "",
-      event_heads: festData.eventHeads || festData.event_heads || [],
-      created_by: festData.createdBy || festData.created_by || req.userInfo?.email || req.userId,
-      auth_uuid: req.userId,
-      // New enhanced fest fields
-      venue: festData.venue || null,
-      status: festData.status || "upcoming",
-      registration_deadline: festData.registration_deadline || null,
-      timeline: festData.timeline || [],
-      sponsors: festData.sponsors || [],
-      social_links: festData.social_links || [],
-      faqs: festData.faqs || [],
-      campus_hosted_at: festData.campus_hosted_at || festData.campusHostedAt || null,
-      allowed_campuses: festData.allowed_campuses || festData.allowedCampuses || [],
-      allow_outsiders: festData.allow_outsiders === true || festData.allow_outsiders === 'true' || festData.allowOutsiders === true || festData.allowOutsiders === 'true' ? true : false,
-    };
+      // Proceed with insertion
+      const festPayload = {
+        fest_id,
+        fest_title: festData.festTitle || festData.title || "",
+        description: festData.description || festData.detailed_description || festData.detailedDescription || "",
+        opening_date: festData.openingDate || festData.opening_date || null,
+        closing_date: festData.closingDate || festData.closing_date || null,
+        fest_image_url: festData.festImageUrl || festData.fest_image_url || null,
+        organizing_dept: festData.organizingDept || festData.organizing_dept || "",
+        department_access: festData.departmentAccess || festData.department_access || [],
+        category: festData.category || "",
+        contact_email: festData.contactEmail || festData.contact_email || "",
+        contact_phone: festData.contactPhone || festData.contact_phone || "",
+        event_heads: festData.eventHeads || festData.event_heads || [],
+        created_by: festData.createdBy || festData.created_by || req.userInfo?.email || req.userId,
+        auth_uuid: req.userId,
+        // New enhanced fest fields
+        venue: festData.venue || null,
+        status: festData.status || "upcoming",
+        registration_deadline: festData.registration_deadline || null,
+        timeline: festData.timeline || [],
+        sponsors: festData.sponsors || [],
+        social_links: festData.social_links || [],
+        faqs: festData.faqs || [],
+        campus_hosted_at: festData.campus_hosted_at || festData.campusHostedAt || null,
+        allowed_campuses: festData.allowed_campuses || festData.allowedCampuses || [],
+        allow_outsiders: festData.allow_outsiders === true || festData.allow_outsiders === 'true' || festData.allowOutsiders === true || festData.allowOutsiders === 'true' ? true : false,
+      };
 
-  const inserted = await insert("fest", [festPayload]);
-    const createdFest = inserted?.[0];
+      const inserted = await insert("fests", [festPayload]);
+      const createdFest = inserted?.[0];
 
-    // Grant organiser access to event heads with expiration dates
-    const eventHeads = festData.eventHeads || festData.event_heads || [];
-    for (const head of eventHeads) {
-      if (head && head.email) {
-        try {
-          // Find the user by email
-          const user = await queryOne("users", { where: { email: head.email } });
-          if (user) {
-            // Update user's organiser status with expiration
-            await update("users", { 
-              is_organiser: true,
-              organiser_expires_at: head.expiresAt || null
-            }, { email: head.email });
-            console.log(`Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
-          } else {
-            console.log(`User ${head.email} not found, will be granted access when they sign up`);
+      // Grant organiser access to event heads with expiration dates
+      const eventHeads = festData.eventHeads || festData.event_heads || [];
+      for (const head of eventHeads) {
+        if (head && head.email) {
+          try {
+            // Find the user by email
+            const user = await queryOne("users", { where: { email: head.email } });
+            if (user) {
+              // Update user's organiser status with expiration
+              await update("users", {
+                is_organiser: true,
+                organiser_expires_at: head.expiresAt || null
+              }, { email: head.email });
+              console.log(`Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
+            } else {
+              console.log(`User ${head.email} not found, will be granted access when they sign up`);
+            }
+          } catch (userError) {
+            console.error(`Error updating organiser status for ${head.email}:`, userError);
           }
-        } catch (userError) {
-          console.error(`Error updating organiser status for ${head.email}:`, userError);
         }
       }
-    }
 
-    // Send notifications to all users about the new fest (non-blocking)
-    sendBroadcastNotification({
-      title: 'New Fest Announced',
-      message: `${festPayload.fest_title} — Don't miss this fest!`,
-      type: 'info',
-      event_id: fest_id,
-      event_title: festPayload.fest_title,
-      action_url: `/fest/${fest_id}`
-    }).then(() => {
-      console.log(`✅ Sent notifications for new fest: ${festPayload.fest_title}`);
-    }).catch((notifError) => {
-      console.error('❌ Failed to send fest notifications:', notifError);
-    });
-
-    // Push to UniversityGated if outsiders are enabled (non-blocking)
-    if (isGatedEnabled() && festPayload.allow_outsiders) {
-      pushFestToGated(
-        festPayload,
-        req.userInfo?.email || festPayload.created_by,
-        req.userInfo?.name || 'SOCIO Organiser'
-      ).then(() => {
-        console.log(`✅ Pushed fest "${festPayload.fest_title}" to UniversityGated`);
-      }).catch((gatedError) => {
-        console.error(`❌ Failed to push fest to Gated:`, gatedError.message);
+      // Send notifications to all users about the new fest (non-blocking)
+      sendBroadcastNotification({
+        title: 'New Fest Announced',
+        message: `${festPayload.fest_title} — Don't miss this fest!`,
+        type: 'info',
+        event_id: fest_id,
+        event_title: festPayload.fest_title,
+        action_url: `/fest/${fest_id}`
+      }).then(() => {
+        console.log(`✅ Sent notifications for new fest: ${festPayload.fest_title}`);
+      }).catch((notifError) => {
+        console.error('❌ Failed to send fest notifications:', notifError);
       });
+
+      // Push to UniversityGated if outsiders are enabled (non-blocking)
+      if (isGatedEnabled() && festPayload.allow_outsiders) {
+        pushFestToGated(
+          festPayload,
+          req.userInfo?.email || festPayload.created_by,
+          req.userInfo?.name || 'SOCIO Organiser'
+        ).then(() => {
+          console.log(`✅ Pushed fest "${festPayload.fest_title}" to UniversityGated`);
+        }).catch((gatedError) => {
+          console.error(`❌ Failed to push fest to Gated:`, gatedError.message);
+        });
+      }
+
+      return res.status(201).json({
+        message: "Fest created successfully",
+        fest: mapFestResponse(createdFest)
+      });
+
+    } catch (error) {
+      console.error("Error creating fest:", error);
+      return res.status(500).json({ error: "Internal server error while creating fest." });
     }
-
-    return res.status(201).json({
-      message: "Fest created successfully",
-      fest: mapFestResponse(createdFest)
-    });
-
-  } catch (error) {
-    console.error("Error creating fest:", error);
-    return res.status(500).json({ error: "Internal server error while creating fest." });
-  }
-});
+  });
 
 // PUT - Update fest - REQUIRES AUTHENTICATION + OWNERSHIP + ORGANISER PRIVILEGES
 router.put(
@@ -243,126 +243,126 @@ router.put(
   requireOrganiser,
   requireOwnership('fest', 'festId', 'auth_uuid'),  // Master admin bypass built-in
   async (req, res) => {
-  try {
-    const { festId } = req.params;
-    const updateData = req.body;
-    const existingFest = req.resource; // From ownership middleware
+    try {
+      const { festId } = req.params;
+      const updateData = req.body;
+      const existingFest = req.resource; // From ownership middleware
 
-    // Get the new title
-    const newTitle = updateData.fest_title ?? updateData.festTitle ?? updateData.title;
-    const titleChanged = newTitle && newTitle.trim() !== existingFest.fest_title;
+      // Get the new title
+      const newTitle = updateData.fest_title ?? updateData.festTitle ?? updateData.title;
+      const titleChanged = newTitle && newTitle.trim() !== existingFest.fest_title;
 
-    const updatePayload = {};
+      const updatePayload = {};
 
-    const mapFields = [
-      ["fest_title", newTitle],
-      ["description", updateData.description ?? updateData.detailed_description ?? updateData.detailedDescription],
-      ["opening_date", updateData.opening_date ?? updateData.openingDate],
-      ["closing_date", updateData.closing_date ?? updateData.closingDate],
-      ["fest_image_url", updateData.fest_image_url ?? updateData.festImageUrl],
-      ["organizing_dept", updateData.organizing_dept ?? updateData.organizingDept],
-      ["category", updateData.category],
-      ["contact_email", updateData.contact_email ?? updateData.contactEmail],
-      ["contact_phone", updateData.contact_phone ?? updateData.contactPhone],
-      ["department_access", updateData.department_access ?? updateData.departmentAccess],
-      ["event_heads", updateData.event_heads ?? updateData.eventHeads],
-      // New enhanced fest fields
-      ["venue", updateData.venue],
-      ["status", updateData.status],
-      ["registration_deadline", updateData.registration_deadline],
-      ["timeline", updateData.timeline],
-      ["sponsors", updateData.sponsors],
-      ["social_links", updateData.social_links],
-      ["faqs", updateData.faqs],
-      ["campus_hosted_at", updateData.campus_hosted_at ?? updateData.campusHostedAt],
-      ["allowed_campuses", updateData.allowed_campuses ?? updateData.allowedCampuses],
-      ["allow_outsiders", updateData.allow_outsiders !== undefined ? (updateData.allow_outsiders === true || updateData.allow_outsiders === 'true') : (updateData.allowOutsiders !== undefined ? (updateData.allowOutsiders === true || updateData.allowOutsiders === 'true') : undefined)],
-    ];
+      const mapFields = [
+        ["fest_title", newTitle],
+        ["description", updateData.description ?? updateData.detailed_description ?? updateData.detailedDescription],
+        ["opening_date", updateData.opening_date ?? updateData.openingDate],
+        ["closing_date", updateData.closing_date ?? updateData.closingDate],
+        ["fest_image_url", updateData.fest_image_url ?? updateData.festImageUrl],
+        ["organizing_dept", updateData.organizing_dept ?? updateData.organizingDept],
+        ["category", updateData.category],
+        ["contact_email", updateData.contact_email ?? updateData.contactEmail],
+        ["contact_phone", updateData.contact_phone ?? updateData.contactPhone],
+        ["department_access", updateData.department_access ?? updateData.departmentAccess],
+        ["event_heads", updateData.event_heads ?? updateData.eventHeads],
+        // New enhanced fest fields
+        ["venue", updateData.venue],
+        ["status", updateData.status],
+        ["registration_deadline", updateData.registration_deadline],
+        ["timeline", updateData.timeline],
+        ["sponsors", updateData.sponsors],
+        ["social_links", updateData.social_links],
+        ["faqs", updateData.faqs],
+        ["campus_hosted_at", updateData.campus_hosted_at ?? updateData.campusHostedAt],
+        ["allowed_campuses", updateData.allowed_campuses ?? updateData.allowedCampuses],
+        ["allow_outsiders", updateData.allow_outsiders !== undefined ? (updateData.allow_outsiders === true || updateData.allow_outsiders === 'true') : (updateData.allowOutsiders !== undefined ? (updateData.allowOutsiders === true || updateData.allowOutsiders === 'true') : undefined)],
+      ];
 
-    for (const [key, value] of mapFields) {
-      if (value !== undefined) {
-        updatePayload[key] = key === "department_access" || key === "event_heads" ? value || [] : value;
-      }
-    }
-
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({ error: "No valid fields to update" });
-    }
-
-    updatePayload.updated_at = new Date().toISOString();
-
-    if (titleChanged) {
-      try {
-        // Update notifications event_title so they match the new name
-        const updatedTitle = newTitle.trim();
-        await update("notifications", { 
-          event_title: updatedTitle,
-        }, { event_id: festId });
-        console.log(`Updated notification titles for fest_id '${festId}' to '${updatedTitle}'`);
-      } catch (notifError) {
-        console.log(`No notifications to update or error: ${notifError.message}`);
-      }
-      
-      // Update any legacy events that might be referencing the fest by its OLD title instead of ID
-      try {
-        await update("events", { fest: festId }, { fest: existingFest.fest_title });
-      } catch (eventsError) {}
-    }
-
-    const updated = await update("fest", updatePayload, { fest_id: festId });
-    const updatedFest = updated?.[0];
-
-    // Push to UniversityGated if outsiders are now enabled (non-blocking)
-    if (isGatedEnabled() && updatedFest) {
-      const outsidersEnabled = updatedFest.allow_outsiders === true || updatedFest.allow_outsiders === 'true';
-      if (outsidersEnabled) {
-        pushFestToGated(
-          updatedFest,
-          req.userInfo?.email || updatedFest.created_by,
-          req.userInfo?.name || 'SOCIO Organiser'
-        ).then(() => {
-          console.log(`✅ Pushed updated fest "${updatedFest.fest_title}" to UniversityGated`);
-        }).catch((gatedError) => {
-          console.error(`❌ Failed to push updated fest to Gated:`, gatedError.message);
-        });
-      }
-    }
-
-    // Grant organiser access to event heads with expiration dates
-    const eventHeads = updateData.eventHeads || updateData.event_heads || [];
-    for (const head of eventHeads) {
-      if (head && head.email) {
-        try {
-          // Find the user by email
-          const user = await queryOne("users", { where: { email: head.email } });
-          if (user) {
-            // Update user's organiser status with expiration
-            await update("users", { 
-              is_organiser: true,
-              organiser_expires_at: head.expiresAt || null
-            }, { email: head.email });
-            console.log(`Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
-          } else {
-            console.log(`User ${head.email} not found, will be granted access when they sign up`);
-          }
-        } catch (userError) {
-          console.error(`Error updating organiser status for ${head.email}:`, userError);
+      for (const [key, value] of mapFields) {
+        if (value !== undefined) {
+          updatePayload[key] = key === "department_access" || key === "event_heads" ? value || [] : value;
         }
       }
+
+      if (Object.keys(updatePayload).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      updatePayload.updated_at = new Date().toISOString();
+
+      if (titleChanged) {
+        try {
+          // Update notifications event_title so they match the new name
+          const updatedTitle = newTitle.trim();
+          await update("notifications", {
+            event_title: updatedTitle,
+          }, { event_id: festId });
+          console.log(`Updated notification titles for fest_id '${festId}' to '${updatedTitle}'`);
+        } catch (notifError) {
+          console.log(`No notifications to update or error: ${notifError.message}`);
+        }
+
+        // Update any legacy events that might be referencing the fest by its OLD title instead of ID
+        try {
+          await update("events", { fest: festId }, { fest: existingFest.fest_title });
+        } catch (eventsError) { }
+      }
+
+      const updated = await update("fests", updatePayload, { fest_id: festId });
+      const updatedFest = updated?.[0];
+
+      // Push to UniversityGated if outsiders are now enabled (non-blocking)
+      if (isGatedEnabled() && updatedFest) {
+        const outsidersEnabled = updatedFest.allow_outsiders === true || updatedFest.allow_outsiders === 'true';
+        if (outsidersEnabled) {
+          pushFestToGated(
+            updatedFest,
+            req.userInfo?.email || updatedFest.created_by,
+            req.userInfo?.name || 'SOCIO Organiser'
+          ).then(() => {
+            console.log(`✅ Pushed updated fest "${updatedFest.fest_title}" to UniversityGated`);
+          }).catch((gatedError) => {
+            console.error(`❌ Failed to push updated fest to Gated:`, gatedError.message);
+          });
+        }
+      }
+
+      // Grant organiser access to event heads with expiration dates
+      const eventHeads = updateData.eventHeads || updateData.event_heads || [];
+      for (const head of eventHeads) {
+        if (head && head.email) {
+          try {
+            // Find the user by email
+            const user = await queryOne("users", { where: { email: head.email } });
+            if (user) {
+              // Update user's organiser status with expiration
+              await update("users", {
+                is_organiser: true,
+                organiser_expires_at: head.expiresAt || null
+              }, { email: head.email });
+              console.log(`Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
+            } else {
+              console.log(`User ${head.email} not found, will be granted access when they sign up`);
+            }
+          } catch (userError) {
+            console.error(`Error updating organiser status for ${head.email}:`, userError);
+          }
+        }
+      }
+
+      return res.status(200).json({
+        message: "Fest updated successfully",
+        fest: mapFestResponse(updatedFest),
+        fest_id: festId,
+        id_changed: false
+      });
+
+    } catch (error) {
+      console.error("Error updating fest:", error);
+      return res.status(500).json({ error: "Internal server error while updating fest." });
     }
-
-    return res.status(200).json({
-      message: "Fest updated successfully",
-      fest: mapFestResponse(updatedFest),
-      fest_id: festId,
-      id_changed: false
-    });
-
-  } catch (error) {
-    console.error("Error updating fest:", error);
-    return res.status(500).json({ error: "Internal server error while updating fest." });
-  }
-});
+  });
 
 // DELETE fest - REQUIRES AUTHENTICATION + OWNERSHIP + ORGANISER PRIVILEGES
 router.delete(
@@ -373,35 +373,35 @@ router.delete(
   requireOrganiser,
   requireOwnership('fest', 'festId', 'auth_uuid'),  // Master admin bypass built-in
   async (req, res) => {
-  try {
-    const { festId } = req.params;
-    const existingFest = req.resource; // From ownership middleware
+    try {
+      const { festId } = req.params;
+      const existingFest = req.resource; // From ownership middleware
 
-    // Delete associated events first
-    await remove("events", { fest: festId });
+      // Delete associated events first
+      await remove("events", { fest: festId });
 
-    // Delete fest image if exists
-    if (existingFest.fest_image_url) {
-      const festImagePath = getPathFromStorageUrl(existingFest.fest_image_url, "fest-images");
-      if (festImagePath) {
-        await deleteFileFromLocal(festImagePath, "fest-images");
+      // Delete fest image if exists
+      if (existingFest.fest_image_url) {
+        const festImagePath = getPathFromStorageUrl(existingFest.fest_image_url, "fest-images");
+        if (festImagePath) {
+          await deleteFileFromLocal(festImagePath, "fest-images");
+        }
       }
+
+      // Delete the fest
+      const deleted = await remove("fests", { fest_id: festId });
+      if (!deleted || deleted.length === 0) {
+        return res.status(404).json({ error: "Fest not found" });
+      }
+
+      return res.status(200).json({
+        message: "Fest and associated events deleted successfully"
+      });
+
+    } catch (error) {
+      console.error("Error deleting fest:", error);
+      return res.status(500).json({ error: "Internal server error while deleting fest." });
     }
-
-    // Delete the fest
-  const deleted = await remove("fest", { fest_id: festId });
-    if (!deleted || deleted.length === 0) {
-      return res.status(404).json({ error: "Fest not found" });
-    }
-
-    return res.status(200).json({
-      message: "Fest and associated events deleted successfully"
-    });
-
-  } catch (error) {
-    console.error("Error deleting fest:", error);
-    return res.status(500).json({ error: "Internal server error while deleting fest." });
-  }
-});
+  });
 
 export default router;

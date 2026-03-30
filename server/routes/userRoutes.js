@@ -450,7 +450,7 @@ router.post("/", async (req, res) => {
     // 2. Check if user was pre-added as event head (non-blocking)
     (async () => {
       try {
-        const allFests = await queryAll('fest');
+        const allFests = await queryAll('fests');
         for (const fest of allFests || []) {
           const eventHeads = fest.event_heads || [];
           const matchingHead = eventHeads.find((head) => 
