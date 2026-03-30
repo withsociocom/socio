@@ -179,7 +179,7 @@ function NavigationBar() {
           </form>
 
           {/* Auth Buttons */}
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-2 sm:gap-3 items-center flex-wrap justify-end">
             {isLoading && !session ? (
               <div className="flex items-center gap-2">
                 <div className="h-9 w-20 rounded-full bg-gray-200 animate-pulse" />
@@ -187,18 +187,18 @@ function NavigationBar() {
               </div>
             ) : session ? (
               userData && (userData.is_organiser || (userData as any).is_masteradmin) ? (
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-2 sm:gap-4 items-center flex-wrap justify-end">
                   <NotificationSystem />
                   {(userData as any).is_masteradmin && (
                     <Link href="/masteradmin">
-                      <button className="cursor-pointer font-semibold px-4 py-2 border-2 rounded-full text-sm hover:bg-red-50 border-red-600 text-red-600 transition-all duration-200 ease-in-out">
+                      <button className="cursor-pointer font-semibold px-3 py-1.5 sm:px-4 sm:py-2 border-2 rounded-full text-xs sm:text-sm hover:bg-red-50 border-red-600 text-red-600 transition-all duration-200 ease-in-out">
                         Admin Panel
                       </button>
                     </Link>
                   )}
                   {userData.is_organiser && (
                     <Link href="/manage">
-                      <button className="cursor-pointer font-semibold px-4 py-2 border-2 rounded-full text-sm hover:bg-[#f3f3f3] transition-all duration-200 ease-in-out">
+                      <button className="cursor-pointer font-semibold px-3 py-1.5 sm:px-4 sm:py-2 border-2 rounded-full text-xs sm:text-sm hover:bg-[#f3f3f3] transition-all duration-200 ease-in-out">
                         Manage events
                       </button>
                     </Link>
@@ -225,7 +225,7 @@ function NavigationBar() {
                   </Link>
                 </div>
               ) : (
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-2 sm:gap-4 items-center flex-wrap justify-end">
                   {userData && <NotificationSystem />}
                   <Link href="/profile">
   <div className="flex items-center gap-2 lg:gap-4 min-w-0">
@@ -257,14 +257,14 @@ function NavigationBar() {
                 <button
                   onClick={handleSignIn}
                   disabled={isSigningIn}
-                  className="cursor-pointer font-medium px-4 py-2 border-2 border-[#154CB3] hover:bg-[#154CB3] hover:text-white transition-all duration-200 ease-in-out text-sm rounded-full text-[#154CB3] bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="cursor-pointer font-medium px-3 py-1.5 sm:px-4 sm:py-2 border-2 border-[#154CB3] hover:bg-[#154CB3] hover:text-white transition-all duration-200 ease-in-out text-xs sm:text-sm rounded-full text-[#154CB3] bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Log in
                 </button>
                 <button
                   onClick={handleSignUpClick}
                   disabled={isSigningIn}
-                  className="cursor-pointer font-semibold px-5 py-2 border-2 border-[#154CB3] bg-[#154CB3] hover:bg-[#0d3a8a] hover:border-[#0d3a8a] transition-all duration-200 ease-in-out text-sm rounded-full text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="cursor-pointer font-semibold px-4 py-1.5 sm:px-5 sm:py-2 border-2 border-[#154CB3] bg-[#154CB3] hover:bg-[#0d3a8a] hover:border-[#0d3a8a] transition-all duration-200 ease-in-out text-xs sm:text-sm rounded-full text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isSigningIn ? (
                     <>
