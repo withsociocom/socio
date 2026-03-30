@@ -351,6 +351,10 @@ export default function ManageDashboard() {
   const paginatedFests = paginateArray(searchedUserFests, festsPage);
   const paginatedEvents = paginateArray(searchedUserEvents, eventsPage);
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   
   // ─── REPORT GENERATION HANDLER ────────────────────────
   const handleGenerateReport = async () => {
@@ -847,7 +851,14 @@ export default function ManageDashboard() {
               Page {activeTab === "fests" ? festsPage : eventsPage} of {activeTab === "fests" ? (paginatedFests.totalPages || 1) : (paginatedEvents.totalPages || 1)}
             </div>
             <button
-              onClick={() => activeTab === "fests" ? setFestsPage(p => p + 1) : setEventsPage(p => p + 1)}
+              onClick={() => {
+                if (activeTab === "fests") {
+                  setFestsPage((p) => p + 1);
+                } else {
+                  setEventsPage((p) => p + 1);
+                }
+                scrollToTop();
+              }}
               disabled={activeTab === "fests" ? !paginatedFests.hasNext : !paginatedEvents.hasNext}
               className="flex items-center gap-1 px-3 py-2 rounded-md text-sm font-semibold text-[#154cb3] hover:bg-blue-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
