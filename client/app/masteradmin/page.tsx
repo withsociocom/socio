@@ -12,7 +12,6 @@ import DateTimePickerAdmin from "../_components/DateTimePickerAdmin";
 import dynamic from "next/dynamic";
 import {
   LayoutDashboard,
-  Users,
   CalendarDays,
   Trophy,
   Bell,
@@ -775,12 +774,10 @@ export default function MasterAdminPage() {
   // ── Sidebar nav config ──
   const sidebarNav = [
     { id: "dashboard" as const, label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: "users" as const, label: "Users", icon: <Users className="w-4 h-4" />, count: users.length },
     { id: "events" as const, label: "Events", icon: <CalendarDays className="w-4 h-4" />, count: events.length },
     { id: "fests" as const, label: "Fests", icon: <Trophy className="w-4 h-4" />, count: fests.length },
     { id: "notifications" as const, label: "Notifications", icon: <Bell className="w-4 h-4" /> },
     { id: "report" as const, label: "Reports", icon: <BarChart2 className="w-4 h-4" /> },
-    { id: "settings" as const, label: "Settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
   const managementNav = [
@@ -913,6 +910,8 @@ export default function MasterAdminPage() {
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value)}
+                    aria-label="Filter users by role"
+                    title="Filter users by role"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#154CB3] focus:border-[#154CB3] transition-all"
                   >
                     <option value="all">All Users ({users.length})</option>
@@ -1171,6 +1170,8 @@ export default function MasterAdminPage() {
                   <select
                     value={eventStatusFilter}
                     onChange={(e) => setEventStatusFilter(e.target.value as any)}
+                    aria-label="Filter events by status"
+                    title="Filter events by status"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#154CB3] focus:border-[#154CB3] transition-all"
                   >
                     <option value="all">All Events ({events.length})</option>
@@ -1482,6 +1483,8 @@ export default function MasterAdminPage() {
                   <select
                     value={selectedReportFest}
                     onChange={(e) => { setSelectedReportFest(e.target.value); setSelectedEventIds(new Set()); }}
+                    aria-label="Select fest for report"
+                    title="Select fest for report"
                     className="w-full md:w-1/2 px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#154CB3] focus:border-transparent transition-all"
                   >
                     <option value="">-- Select a fest --</option>
@@ -1619,6 +1622,8 @@ export default function MasterAdminPage() {
                 <select
                   value={selectedAccreditation}
                   onChange={(e) => setSelectedAccreditation(e.target.value)}
+                  aria-label="Select accreditation body"
+                  title="Select accreditation body"
                   className="w-full md:w-1/2 px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#154CB3] focus:border-transparent transition-all"
                 >
                   <option value="">-- Select accreditation body --</option>
