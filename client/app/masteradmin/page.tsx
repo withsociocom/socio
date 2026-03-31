@@ -8,6 +8,7 @@ import supabase from "@/lib/supabaseClient";
 import toast from "react-hot-toast";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import {
+  addThemedChartsSheet,
   addStructuredSummarySheet,
   addStructuredTableSheet,
   createThemedWorkbook,
@@ -1802,6 +1803,51 @@ export default function MasterAdminPage() {
                           { header: "Attended At", key: "attended_at", width: 22 },
                         ],
                         rows: participantRows,
+                      });
+
+                      const deptChartData = Object.entries(
+                        eventRows.reduce<Record<string, number>>((acc, row) => {
+                          const dept = row.dept || "Unknown";
+                          acc[dept] = (acc[dept] || 0) + row.regs;
+                          return acc;
+                        }, {})
+                      )
+                        .map(([label, value]) => ({ label, value }))
+                        .sort((a, b) => b.value - a.value)
+                        .slice(0, 10);
+
+                      const attendanceChartData = [
+                        {
+                          label: "Attended",
+                          value: participantRows.filter((row) => row.status.toLowerCase() === "attended").length,
+                        },
+                        {
+                          label: "Absent",
+                          value: participantRows.filter((row) => row.status.toLowerCase() === "absent").length,
+                        },
+                        {
+                          label: "Pending",
+                          value: participantRows.filter((row) => row.status.toLowerCase() === "pending").length,
+                        },
+                        {
+                          label: "Unmarked",
+                          value: participantRows.filter((row) => row.status.toLowerCase() === "unmarked").length,
+                        },
+                      ];
+
+                      addThemedChartsSheet(workbook, {
+                        title: "Report Visual Overview",
+                        subtitle: "Embedded chart snapshots for fast review.",
+                        primaryChart: {
+                          title: "Registrations by Department",
+                          type: "bar",
+                          data: deptChartData,
+                        },
+                        secondaryChart: {
+                          title: "Participant Attendance Mix",
+                          type: "donut",
+                          data: attendanceChartData,
+                        },
                       });
 
                       const filename = reportMode === "fest" && data.fest

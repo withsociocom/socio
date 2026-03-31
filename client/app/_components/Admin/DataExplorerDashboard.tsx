@@ -33,6 +33,11 @@ import {
   type AnalyticsDataset,
   type AnalyticsUser,
 } from "@/lib/adminAnalyticsQueries";
+import {
+  addThemedChartsSheet,
+  type XlsxChartDataPoint,
+  type XlsxChartType,
+} from "@/lib/xlsxTheme";
 
 type DatePreset = "7d" | "30d" | "90d" | "1y" | "all";
 type TimeGranularity = "daily" | "weekly" | "monthly";
@@ -93,6 +98,12 @@ type DetailedExportColumn = {
 type ExportSummarySection = {
   title: string;
   rows: Array<{ label: string; value: string | number }>;
+};
+
+type ExportChartDefinition = {
+  title: string;
+  type: XlsxChartType;
+  data: XlsxChartDataPoint[];
 };
 
 const CHART_COLORS = ["#0f4c81", "#0ea5a4", "#f59e0b", "#ef4444", "#8b5cf6", "#16a34a", "#0ea5e9", "#f97316"];
@@ -225,7 +236,11 @@ async function exportDetailedXlsx(
   filename: string,
   columns: DetailedExportColumn[],
   rows: ExplorerRow[],
-  summarySections: ExportSummarySection[]
+  summarySections: ExportSummarySection[],
+  charts?: {
+    primary: ExportChartDefinition;
+    secondary?: ExportChartDefinition;
+  }
 ): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "SOCIO Master Admin";
@@ -380,6 +395,15 @@ async function exportDetailedXlsx(
 
   const headerEndColumn = getExcelColumnLabel(columns.length);
   dataSheet.autoFilter = `A1:${headerEndColumn}1`;
+
+  if (charts && charts.primary.data.length > 0) {
+    addThemedChartsSheet(workbook, {
+      title: "Data Explorer Visual Overview",
+      subtitle: "Chart snapshots are embedded for quick executive analysis.",
+      primaryChart: charts.primary,
+      secondaryChart: charts.secondary,
+    });
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -934,41 +958,68 @@ export default function DataExplorerDashboard() {
           ? "All time"
           : datePreset.toUpperCase();
 
-      await exportDetailedXlsx("data_explorer_detailed", DETAILED_EXPORT_COLUMNS, tableRows, [
+      const timelineChart: ExportChartDefinition = {
+        title: `Registrations Trend (${timeGranularity})`,
+        type: "line",
+        data: timeSeriesData.slice(-24).map((point) => ({
+          label: point.label,
+          value: point.registrations,
+        })),
+      };
+
+      const distributionChart: ExportChartDefinition = {
+        title: donutMode === "roles" ? "Registrations by User Role" : "Registrations by Ticket Type",
+        type: "donut",
+        data: donutData.slice(0, 10).map((point) => ({
+          label: point.name,
+          value: point.value,
+        })),
+      };
+
+      await exportDetailedXlsx(
+        "data_explorer_detailed",
+        DETAILED_EXPORT_COLUMNS,
+        tableRows,
+        [
+          {
+            title: "Report Metadata",
+            rows: [
+              { label: "Export Generated At", value: new Date().toLocaleString("en-GB") },
+              {
+                label: "Data Snapshot Generated At",
+                value: dataset?.generatedAt ? new Date(dataset.generatedAt).toLocaleString("en-GB") : "-",
+              },
+              { label: "Rows Exported", value: tableRows.length },
+            ],
+          },
+          {
+            title: "Active Filters and Sort",
+            rows: [
+              { label: "Date Window", value: activeDateWindow },
+              { label: "Campus Filter", value: formatFilterSelection(campusFilter) },
+              { label: "Department Filter", value: formatFilterSelection(departmentFilter) },
+              { label: "Event Type Filter", value: formatFilterSelection(eventTypeFilter) },
+              { label: "Global Search", value: searchQuery.trim() || "None" },
+              { label: "Grid Search", value: tableQuery.trim() || "None" },
+              { label: "Sort", value: `${sortKey} (${sortDirection})` },
+            ],
+          },
+          {
+            title: "KPI Snapshot",
+            rows: [
+              { label: "Registrations In Scope", value: totalRegistrations.toLocaleString() },
+              { label: "Participants In Scope", value: totalParticipants.toLocaleString() },
+              { label: "Attendance In Scope", value: totalAttendance.toLocaleString() },
+              { label: "Conversion Rate", value: `${conversionRate.toFixed(1)}%` },
+              { label: "Estimated Revenue", value: toCurrency(totalRevenue) },
+            ],
+          },
+        ],
         {
-          title: "Report Metadata",
-          rows: [
-            { label: "Export Generated At", value: new Date().toLocaleString("en-GB") },
-            {
-              label: "Data Snapshot Generated At",
-              value: dataset?.generatedAt ? new Date(dataset.generatedAt).toLocaleString("en-GB") : "-",
-            },
-            { label: "Rows Exported", value: tableRows.length },
-          ],
-        },
-        {
-          title: "Active Filters and Sort",
-          rows: [
-            { label: "Date Window", value: activeDateWindow },
-            { label: "Campus Filter", value: formatFilterSelection(campusFilter) },
-            { label: "Department Filter", value: formatFilterSelection(departmentFilter) },
-            { label: "Event Type Filter", value: formatFilterSelection(eventTypeFilter) },
-            { label: "Global Search", value: searchQuery.trim() || "None" },
-            { label: "Grid Search", value: tableQuery.trim() || "None" },
-            { label: "Sort", value: `${sortKey} (${sortDirection})` },
-          ],
-        },
-        {
-          title: "KPI Snapshot",
-          rows: [
-            { label: "Registrations In Scope", value: totalRegistrations.toLocaleString() },
-            { label: "Participants In Scope", value: totalParticipants.toLocaleString() },
-            { label: "Attendance In Scope", value: totalAttendance.toLocaleString() },
-            { label: "Conversion Rate", value: `${conversionRate.toFixed(1)}%` },
-            { label: "Estimated Revenue", value: toCurrency(totalRevenue) },
-          ],
-        },
-      ]);
+          primary: timelineChart,
+          secondary: distributionChart,
+        }
+      );
     } finally {
       setIsExportingXlsx(false);
     }
@@ -986,7 +1037,11 @@ export default function DataExplorerDashboard() {
     sortKey,
     tableQuery,
     tableRows,
+    timeGranularity,
+    timeSeriesData,
     totalAttendance,
+    donutData,
+    donutMode,
     totalParticipants,
     totalRegistrations,
     totalRevenue,

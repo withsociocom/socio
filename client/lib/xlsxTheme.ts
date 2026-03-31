@@ -33,6 +33,20 @@ export type SummarySection = {
   rows: Array<{ label: string; value: string | number }>;
 };
 
+export type XlsxChartType = "bar" | "line" | "donut";
+
+export type XlsxChartDataPoint = {
+  label: string;
+  value: number;
+  color?: string;
+};
+
+export type XlsxChartDefinition = {
+  title: string;
+  type: XlsxChartType;
+  data: XlsxChartDataPoint[];
+};
+
 type SummarySheetOptions = {
   title: string;
   subtitle?: string;
@@ -49,6 +63,25 @@ type DataSheetOptions<T extends Record<string, XlsxCellPrimitive>> = {
   autoFilter?: boolean;
   rowHeight?: number;
 };
+
+type ChartsSheetOptions = {
+  title: string;
+  subtitle?: string;
+  sheetName?: string;
+  primaryChart: XlsxChartDefinition;
+  secondaryChart?: XlsxChartDefinition;
+};
+
+const DEFAULT_CHART_COLORS = [
+  "#0F4C81",
+  "#0EA5A4",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#16A34A",
+  "#0EA5E9",
+  "#F97316",
+];
 
 function toExcelColumnLabel(index: number): string {
   let value = index;
@@ -96,6 +129,201 @@ function setCellBorder(cell: ExcelJS.Cell): void {
     bottom: { style: "thin", color: { argb: BORDER_ARGB } },
     right: { style: "thin", color: { argb: BORDER_ARGB } },
   };
+}
+
+function createChartCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  if (typeof document === "undefined") return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) return null;
+  return { canvas, ctx };
+}
+
+function drawChartCardBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "#E2E8F0";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
+}
+
+function normalizeChartData(data: XlsxChartDataPoint[]): XlsxChartDataPoint[] {
+  return data
+    .map((point) => ({
+      label: String(point.label || "Unknown"),
+      value: Number.isFinite(point.value) ? Number(point.value) : 0,
+      color: point.color,
+    }))
+    .filter((point) => point.label.length > 0);
+}
+
+function chartDataToBase64(chart: XlsxChartDefinition, width: number, height: number): string | null {
+  const normalized = normalizeChartData(chart.data);
+  const chartCanvas = createChartCanvas(width, height);
+
+  if (!chartCanvas) return null;
+  const { canvas, ctx } = chartCanvas;
+
+  drawChartCardBackground(ctx, width, height);
+
+  ctx.fillStyle = "#0F172A";
+  ctx.font = "bold 16px Segoe UI";
+  ctx.fillText(chart.title, 20, 30);
+
+  if (normalized.length === 0) {
+    ctx.fillStyle = "#64748B";
+    ctx.font = "13px Segoe UI";
+    ctx.fillText("No data available for this chart.", 20, 62);
+    return canvas.toDataURL("image/png").split(",")[1];
+  }
+
+  if (chart.type === "donut") {
+    const total = normalized.reduce((sum, point) => sum + point.value, 0);
+    const centerX = Math.round(width * 0.3);
+    const centerY = Math.round(height * 0.58);
+    const outerRadius = Math.min(110, Math.round(height * 0.34));
+    const innerRadius = Math.round(outerRadius * 0.58);
+    let currentAngle = -Math.PI / 2;
+
+    normalized.forEach((point, index) => {
+      const ratio = total > 0 ? point.value / total : 0;
+      const angle = ratio * 2 * Math.PI;
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, outerRadius, currentAngle, currentAngle + angle);
+      ctx.closePath();
+      ctx.fillStyle = point.color ?? DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length];
+      ctx.fill();
+
+      currentAngle += angle;
+    });
+
+    ctx.beginPath();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = "#0F172A";
+    ctx.font = "bold 20px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(total.toLocaleString(), centerX, centerY + 6);
+    ctx.font = "12px Segoe UI";
+    ctx.fillStyle = "#64748B";
+    ctx.fillText("Total", centerX, centerY + 24);
+    ctx.textAlign = "left";
+
+    let legendY = 58;
+    normalized.slice(0, 10).forEach((point, index) => {
+      const color = point.color ?? DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length];
+      const percentage = total > 0 ? (point.value / total) * 100 : 0;
+
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(width * 0.58), legendY - 8, 12, 12);
+      ctx.fillStyle = "#334155";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText(
+        `${point.label.slice(0, 22)} (${percentage.toFixed(1)}%)`,
+        Math.round(width * 0.58) + 18,
+        legendY + 2
+      );
+      legendY += 22;
+    });
+
+    return canvas.toDataURL("image/png").split(",")[1];
+  }
+
+  const plot = {
+    left: 60,
+    top: 52,
+    width: width - 95,
+    height: height - 100,
+  };
+
+  const maxValue = Math.max(1, ...normalized.map((point) => point.value));
+
+  ctx.strokeStyle = "#E2E8F0";
+  ctx.lineWidth = 1;
+  for (let index = 0; index <= 4; index += 1) {
+    const y = plot.top + (plot.height / 4) * index;
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "#CBD5E1";
+  ctx.beginPath();
+  ctx.moveTo(plot.left, plot.top);
+  ctx.lineTo(plot.left, plot.top + plot.height);
+  ctx.lineTo(plot.left + plot.width, plot.top + plot.height);
+  ctx.stroke();
+
+  ctx.fillStyle = "#64748B";
+  ctx.font = "11px Segoe UI";
+  for (let index = 0; index <= 4; index += 1) {
+    const value = Math.round(maxValue - (maxValue / 4) * index);
+    const y = plot.top + (plot.height / 4) * index;
+    ctx.fillText(value.toLocaleString(), 12, y + 4);
+  }
+
+  const pointWidth = plot.width / Math.max(1, normalized.length);
+
+  if (chart.type === "line") {
+    ctx.strokeStyle = "#0F4C81";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+
+    normalized.forEach((point, index) => {
+      const x = plot.left + pointWidth * index + pointWidth / 2;
+      const y = plot.top + plot.height - (point.value / maxValue) * plot.height;
+
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+
+    ctx.stroke();
+
+    normalized.forEach((point, index) => {
+      const x = plot.left + pointWidth * index + pointWidth / 2;
+      const y = plot.top + plot.height - (point.value / maxValue) * plot.height;
+      ctx.fillStyle = point.color ?? "#0F4C81";
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  } else {
+    normalized.forEach((point, index) => {
+      const barWidth = Math.max(10, pointWidth * 0.62);
+      const x = plot.left + pointWidth * index + (pointWidth - barWidth) / 2;
+      const barHeight = (point.value / maxValue) * plot.height;
+      const y = plot.top + plot.height - barHeight;
+
+      ctx.fillStyle = point.color ?? "#0F4C81";
+      ctx.fillRect(x, y, barWidth, barHeight);
+    });
+  }
+
+  ctx.fillStyle = "#334155";
+  ctx.font = "11px Segoe UI";
+  normalized.forEach((point, index) => {
+    const label = point.label.length > 12 ? `${point.label.slice(0, 12)}...` : point.label;
+    const x = plot.left + pointWidth * index + pointWidth / 2;
+    ctx.save();
+    ctx.translate(x, plot.top + plot.height + 16);
+    ctx.rotate(-Math.PI / 7.5);
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  });
+
+  return canvas.toDataURL("image/png").split(",")[1];
 }
 
 export function createThemedWorkbook(creator = "SOCIO Master Admin"): ExcelJS.Workbook {
@@ -277,6 +505,63 @@ export function addStructuredTableSheet<T extends Record<string, XlsxCellPrimiti
 
   if (options.autoFilter !== false && options.columns.length > 0) {
     worksheet.autoFilter = `A1:${toExcelColumnLabel(options.columns.length)}1`;
+  }
+
+  return worksheet;
+}
+
+export function addThemedChartsSheet(
+  workbook: ExcelJS.Workbook,
+  options: ChartsSheetOptions
+): ExcelJS.Worksheet {
+  const worksheet = workbook.addWorksheet(options.sheetName ?? "Charts");
+  worksheet.columns = Array.from({ length: 12 }, () => ({ width: 14 }));
+
+  worksheet.mergeCells("A1:L1");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = options.title;
+  titleCell.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PRIMARY_ARGB } };
+  titleCell.alignment = { horizontal: "left", vertical: "middle" };
+  worksheet.getRow(1).height = 24;
+
+  if (options.subtitle) {
+    worksheet.mergeCells("A2:L2");
+    const subtitleCell = worksheet.getCell("A2");
+    subtitleCell.value = options.subtitle;
+    subtitleCell.font = { italic: true, color: { argb: "FF64748B" } };
+  }
+
+  const primaryImage = chartDataToBase64(options.primaryChart, 980, 320);
+  if (primaryImage) {
+    const primaryImageId = workbook.addImage({
+      base64: primaryImage,
+      extension: "png",
+    });
+
+    worksheet.addImage(primaryImageId, {
+      tl: { col: 0.2, row: 3.2 },
+      ext: { width: 980, height: 320 },
+    });
+  } else {
+    worksheet.getCell("A5").value = "Charts are available only in browser export mode.";
+    worksheet.getCell("A5").font = { color: { argb: "FF64748B" } };
+    return worksheet;
+  }
+
+  if (options.secondaryChart) {
+    const secondaryImage = chartDataToBase64(options.secondaryChart, 980, 320);
+    if (secondaryImage) {
+      const secondaryImageId = workbook.addImage({
+        base64: secondaryImage,
+        extension: "png",
+      });
+
+      worksheet.addImage(secondaryImageId, {
+        tl: { col: 0.2, row: 22.2 },
+        ext: { width: 980, height: 320 },
+      });
+    }
   }
 
   return worksheet;

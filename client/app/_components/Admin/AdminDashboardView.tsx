@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import OrganiserHistoryModal from "./OrganiserHistoryModal";
 import {
+  addThemedChartsSheet,
   addStructuredSummarySheet,
   addStructuredTableSheet,
   createThemedWorkbook,
@@ -505,6 +506,37 @@ export default function AdminDashboardView({
         { header: "Status", key: "status", width: 12, kind: "status" },
       ],
       rows: eventRows,
+    });
+
+    const deptChartData = Object.entries(
+      eventRows.reduce<Record<string, number>>((acc, row) => {
+        const dept = row.department || "Unknown";
+        acc[dept] = (acc[dept] || 0) + row.registrations;
+        return acc;
+      }, {})
+    )
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    const pricingChartData = [
+      { label: "Free Events", value: eventRows.filter((row) => row.registration_fee <= 0).length },
+      { label: "Paid Events", value: eventRows.filter((row) => row.registration_fee > 0).length },
+    ];
+
+    addThemedChartsSheet(workbook, {
+      title: "Events Visual Overview",
+      subtitle: "Chart snapshots are embedded in the workbook for quick analysis.",
+      primaryChart: {
+        title: "Registrations by Department",
+        type: "bar",
+        data: deptChartData,
+      },
+      secondaryChart: {
+        title: "Event Pricing Mix",
+        type: "donut",
+        data: pricingChartData,
+      },
     });
 
     await downloadWorkbook(workbook, `dashboard_events_${now.toISOString().slice(0, 10)}.xlsx`);

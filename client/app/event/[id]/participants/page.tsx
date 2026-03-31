@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import {
+  addThemedChartsSheet,
   addStructuredTableSheet,
   createThemedWorkbook,
   downloadWorkbook,
@@ -198,6 +199,51 @@ export default function StudentsPage() {
       columns,
       rows,
       rowHeight: 24,
+    });
+
+    const attendanceChartData = [
+      {
+        label: "Attended",
+        value: rows.filter((row) => String(row.attendance ?? "").toLowerCase() === "attended").length,
+      },
+      {
+        label: "Absent",
+        value: rows.filter((row) => String(row.attendance ?? "").toLowerCase() === "absent").length,
+      },
+      {
+        label: "Pending",
+        value: rows.filter((row) => String(row.attendance ?? "").toLowerCase() === "pending").length,
+      },
+      {
+        label: "Unmarked",
+        value: rows.filter((row) => String(row.attendance ?? "").toLowerCase() === "unmarked").length,
+      },
+    ];
+
+    const departmentChartData = Object.entries(
+      rows.reduce<Record<string, number>>((acc, row) => {
+        const dept = String(row.department || "Unknown");
+        acc[dept] = (acc[dept] || 0) + 1;
+        return acc;
+      }, {})
+    )
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    addThemedChartsSheet(workbook, {
+      title: "Participants Visual Overview",
+      subtitle: "Chart snapshots are embedded for quick review.",
+      primaryChart: {
+        title: "Participants by Department",
+        type: "bar",
+        data: departmentChartData,
+      },
+      secondaryChart: {
+        title: "Attendance Status Mix",
+        type: "donut",
+        data: attendanceChartData,
+      },
     });
 
     await downloadWorkbook(workbook, `participants-${event_id}.xlsx`);
