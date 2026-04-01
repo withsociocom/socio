@@ -96,9 +96,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkUserSession = async () => {
       setIsLoading(true);
       try {
+        // Add timeout to prevent hanging on Supabase connection issues
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Supabase connection timeout')), 5000)
+        );
+
+        const sessionPromise = supabase.auth.getSession();
         const {
           data: { session: currentSession },
-        } = await supabase.auth.getSession();
+        } = await Promise.race([sessionPromise, timeoutPromise]) as any;
 
         if (currentSession) {
           setSession(currentSession);
@@ -117,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Error checking user session:", error);
-      } finally {
+        // Don't fail completely - just log the error
         setIsLoading(false);
       }
     };
