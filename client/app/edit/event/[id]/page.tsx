@@ -209,7 +209,7 @@ export default function EditEventPage() {
             department: parsedDepartments,
             category: data.category || "",
             organizingDept: data.organizing_dept || "",
-            festEvent: data.fest || "none",
+            festEvent: data.fest_id || data.fest || "none",
             registrationDeadline: data.registration_deadline
               ? dayjs(data.registration_deadline).format("YYYY-MM-DD")
               : "",
@@ -293,7 +293,7 @@ export default function EditEventPage() {
     payload.append("description", formData.detailedDescription);
     payload.append("category", formData.category);
     payload.append("organizing_dept", formData.organizingDept || "");
-    payload.append("fest", formData.festEvent || "none");
+    payload.append("fest_id", formData.festEvent || "none");
     payload.append("registration_deadline", formData.registrationDeadline || "");
     payload.append("venue", formData.location);
     payload.append("registration_fee", formData.registrationFee || "0");

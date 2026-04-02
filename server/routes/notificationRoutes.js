@@ -310,40 +310,58 @@ router.get("/notifications", async (req, res) => {
       return res.status(400).json({ error: "Email parameter is required" });
     }
 
+    console.log(`[Notifications] Fetching for email: ${email}, page: ${page}, limit: ${limit}`);
+
     const pageNum = parseInt(page) || 1;
     const limitNum = Math.min(parseInt(limit) || 20, 50);
     const offset = (pageNum - 1) * limitNum;
 
     // 1. Individual notifications for this user (not broadcasts)
+    console.log(`[Notifications] Fetching individual notifications for ${email}...`);
     const { data: individual, error: indError } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_email', email)
-      .or('is_broadcast.is.null,is_broadcast.eq.false')
       .order('created_at', { ascending: false });
 
-    if (indError) throw indError;
+    if (indError) {
+      console.error(`[Notifications] ❌ Error fetching individual notifications:`, indError);
+      throw indError;
+    }
+    console.log(`[Notifications] ✅ Found ${individual?.length || 0} individual notifications`);
 
     // 2. All broadcast notifications
+    console.log(`[Notifications] Fetching broadcast notifications...`);
     const { data: broadcasts, error: bcError } = await supabase
       .from('notifications')
       .select('*')
       .eq('is_broadcast', true)
       .order('created_at', { ascending: false });
 
-    if (bcError) throw bcError;
+    if (bcError) {
+      console.error(`[Notifications] ❌ Error fetching broadcasts:`, bcError);
+      throw bcError;
+    }
+    console.log(`[Notifications] ✅ Found ${broadcasts?.length || 0} broadcast notifications`);
 
     // 3. This user's read/dismiss records for broadcasts
     const broadcastIds = (broadcasts || []).map(b => b.id);
     let userStatuses = [];
     if (broadcastIds.length > 0) {
+      console.log(`[Notifications] Fetching user status for ${broadcastIds.length} broadcasts...`);
       const { data: statuses, error: statusError } = await supabase
         .from('notification_user_status')
         .select('*')
         .eq('user_email', email)
         .in('notification_id', broadcastIds);
 
-      if (!statusError) userStatuses = statuses || [];
+      if (statusError) {
+        console.warn(`[Notifications] ⚠️ Error fetching user statuses (non-critical):`, statusError.message);
+        // This table might not exist, which is OK - just continue without it
+      } else {
+        userStatuses = statuses || [];
+        console.log(`[Notifications] ✅ Found ${userStatuses.length} user status records`);
+      }
     }
 
     // Build lookup: notification_id → user status
@@ -366,6 +384,8 @@ router.get("/notifications", async (req, res) => {
     const paginated = all.slice(offset, offset + limitNum);
     const unreadCount = all.filter(n => !n.read).length;
 
+    console.log(`[Notifications] ✅ Returning ${paginated.length} notifications (${unreadCount} unread) from ${total} total`);
+
     return res.json({
       notifications: paginated,
       unreadCount,
@@ -379,8 +399,17 @@ router.get("/notifications", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error fetching notifications:", error);
-    return res.status(500).json({ error: "Failed to fetch notifications" });
+    console.error("❌ Error fetching notifications:", error);
+    console.error("🔴 Notification error details:", {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+      email: req.query.email
+    });
+    return res.status(500).json({ 
+      error: "Failed to fetch notifications",
+      details: error.message
+    });
   }
 });
 

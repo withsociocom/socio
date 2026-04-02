@@ -2,6 +2,7 @@ import express from "express";
 import { getPathFromStorageUrl, deleteFileFromLocal } from "../utils/fileUtils.js";
 import { v4 as uuidv4 } from "uuid";
 import { queryAll, queryOne, insert, update, remove } from "../config/database.js";
+import { parseJsonField } from "../utils/parsers.js";
 import {
   authenticateUser,
   getUserInfo,
@@ -173,26 +174,42 @@ router.get("/", async (req, res) => {
 // GET specific fest by ID
 router.get("/:festId", async (req, res) => {
   try {
-    const festTable = await getFestTableForDatabase(queryAll);
     const { festId: festSlug } = req.params;
+    console.log(`[Fest GET] Fetching fest: ${festSlug}`);
+    
     if (!festSlug || typeof festSlug !== "string" || festSlug.trim() === "") {
       return res.status(400).json({
         error: "Fest ID (slug) must be provided in the URL path and be a non-empty string.",
       });
     }
 
+    console.log(`[Fest GET] Getting fest table...`);
+    const festTable = await getFestTableForDatabase(queryAll);
+    
+    console.log(`[Fest GET] Querying ${festTable} table for fest_id: ${festSlug}`);
     const fest = await queryOne(festTable, { where: { fest_id: festSlug } });
 
     if (!fest) {
+      console.warn(`[Fest GET] Fest not found: ${festSlug}`);
       return res.status(404).json({ error: `Fest with ID (slug) '${festSlug}' not found.` });
     }
 
+    console.log(`[Fest GET] ✅ Found fest: ${fest.fest_title}`);
+    
     // OPTIMIZATION: Cache individual fests for 5 minutes
     res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
     return res.status(200).json({ fest: mapFestResponse(fest) });
   } catch (error) {
-    console.error("Error fetching fest:", error);
-    return res.status(500).json({ error: "Internal server error while fetching specific fest." });
+    console.error("❌ Error fetching fest:", error);
+    console.error("🔴 Fest GET error details:", {
+      message: error.message,
+      stack: error.stack,
+      festId: req.params.festId
+    });
+    return res.status(500).json({ 
+      error: "Internal server error while fetching specific fest.",
+      details: error.message
+    });
   }
 });
 
@@ -363,18 +380,18 @@ router.put(
         ["category", updateData.category],
         ["contact_email", updateData.contact_email ?? updateData.contactEmail],
         ["contact_phone", updateData.contact_phone ?? updateData.contactPhone],
-        ["department_access", updateData.department_access ?? updateData.departmentAccess],
-        ["event_heads", updateData.event_heads ?? updateData.eventHeads],
-        // New enhanced fest fields
+        ["department_access", parseJsonField(updateData.department_access ?? updateData.departmentAccess, [])],
+        ["event_heads", parseJsonField(updateData.event_heads ?? updateData.eventHeads, [])],
+        // New enhanced fest fields - parse JSON safely
         ["venue", updateData.venue],
         ["status", updateData.status],
         ["registration_deadline", updateData.registration_deadline],
-        ["timeline", updateData.timeline],
-        ["sponsors", updateData.sponsors],
-        ["social_links", updateData.social_links],
-        ["faqs", updateData.faqs],
+        ["timeline", parseJsonField(updateData.timeline, [])],
+        ["sponsors", parseJsonField(updateData.sponsors, [])],
+        ["social_links", parseJsonField(updateData.social_links, {})],
+        ["faqs", parseJsonField(updateData.faqs, [])],
         ["campus_hosted_at", updateData.campus_hosted_at ?? updateData.campusHostedAt],
-        ["allowed_campuses", updateData.allowed_campuses ?? updateData.allowedCampuses],
+        ["allowed_campuses", parseJsonField(updateData.allowed_campuses ?? updateData.allowedCampuses, [])],
         ["allow_outsiders", updateData.allow_outsiders !== undefined ? (updateData.allow_outsiders === true || updateData.allow_outsiders === 'true') : (updateData.allowOutsiders !== undefined ? (updateData.allowOutsiders === true || updateData.allowOutsiders === 'true') : undefined)],
       ];
 
@@ -402,14 +419,21 @@ router.put(
           console.log(`No notifications to update or error: ${notifError.message}`);
         }
 
-        // Update any legacy events that might be referencing the fest by its OLD title instead of ID
+        // Update any legacy events that might be referencing the fest by its OLD title
         try {
-          await update("events", { fest: festId }, { fest: existingFest.fest_title });
+          await update("events", { fest_id: festId }, { fest: existingFest.fest_title });
         } catch (eventsError) { }
       }
 
       const updated = await update(festTable, updatePayload, { fest_id: festId });
       const updatedFest = updated?.[0];
+      
+      if (!updatedFest) {
+        console.error("❌ Update query returned no data. Updated:", updated);
+        throw new Error("Fest update failed - no data returned from database");
+      }
+      
+      console.log(`✅ Fest updated successfully: ${festId}`);
 
       // Push to UniversityGated if outsiders are now enabled (non-blocking)
       if (isGatedEnabled() && updatedFest) {
@@ -428,28 +452,39 @@ router.put(
       }
 
       // Grant organiser access to event heads with expiration dates
-      const eventHeads = updateData.eventHeads || updateData.event_heads || [];
-      for (const head of eventHeads) {
-        if (head && head.email) {
-          try {
-            // Find the user by email
-            const user = await queryOne("users", { where: { email: head.email } });
-            if (user) {
-              // Update user's organiser status with expiration
-              await update("users", {
-                is_organiser: true,
-                organiser_expires_at: head.expiresAt || null
-              }, { email: head.email });
-              console.log(`Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
-            } else {
-              console.log(`User ${head.email} not found, will be granted access when they sign up`);
+      try {
+        const eventHeads = updateData.eventHeads || updateData.event_heads || [];
+        console.log(`[EventHeads] Processing ${eventHeads.length} event heads`);
+        
+        for (const head of eventHeads) {
+          if (head && head.email) {
+            try {
+              console.log(`[EventHeads] Looking up user: ${head.email}`);
+              // Find the user by email
+              const user = await queryOne("users", { where: { email: head.email } });
+              if (user) {
+                console.log(`[EventHeads] Found user, updating organiser status...`);
+                // Update user's organiser status with expiration
+                await update("users", {
+                  is_organiser: true,
+                  organiser_expires_at: head.expiresAt || null
+                }, { email: head.email });
+                console.log(`✅ Granted organiser access to ${head.email} (expires: ${head.expiresAt || 'never'})`);
+              } else {
+                console.log(`[EventHeads] ⚠️ User ${head.email} not found, will be granted access when they sign up`);
+              }
+            } catch (userError) {
+              console.error(`❌ Error updating organiser status for ${head.email}:`, userError.message);
+              // Continue processing other heads even if one fails
             }
-          } catch (userError) {
-            console.error(`Error updating organiser status for ${head.email}:`, userError);
           }
         }
+      } catch (eventHeadsError) {
+        console.error(`❌ Error processing event heads:`, eventHeadsError.message);
+        // Don't fail the entire update, just log and continue
       }
 
+      console.log(`[response] About to send success response for fest ${festId}`);
       return res.status(200).json({
         message: "Fest updated successfully",
         fest: mapFestResponse(updatedFest),
@@ -458,8 +493,27 @@ router.put(
       });
 
     } catch (error) {
-      console.error("Error updating fest:", error);
-      return res.status(500).json({ error: "Internal server error while updating fest." });
+      console.error("❌ Error updating fest:", error);
+      console.error("🔴 Detailed error info:", {
+        message: error.message,
+        stack: error.stack,
+        code: error.code,
+        requestBodyKeys: Object.keys(req.body || {}),
+        userId: req.userId,
+        userEmail: req.userInfo?.email,
+        isOrganiser: req.userInfo?.is_organiser,
+        festId: req.params.festId
+      });
+      return res.status(500).json({ 
+        error: "Internal server error while updating fest.",
+        details: error.message,
+        context: {
+          endpoint: `/api/fests/${req.params.festId}`,
+          method: "PUT",
+          userId: req.userId,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
   });
 

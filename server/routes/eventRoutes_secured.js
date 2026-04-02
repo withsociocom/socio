@@ -23,6 +23,41 @@ import { pushEventToGated, shouldPushEventToGated, isGatedEnabled } from "../uti
 
 const router = express.Router();
 
+// DIAGNOSTIC ENDPOINT - Check authentication and organiser status
+router.get("/debug/status", 
+  authenticateUser,
+  getUserInfo(),
+  checkRoleExpiration,
+  async (req, res) => {
+    try {
+      console.log("[DEBUG] User status request from:", req.userInfo.email);
+      
+      return res.json({
+        authenticated: true,
+        userId: req.userInfo.auth_uuid,
+        email: req.userInfo.email,
+        isOrganiser: req.userInfo.is_organiser,
+        organiserExpiresAt: req.userInfo.organiser_expires_at,
+        isMasterAdmin: req.userInfo.is_masteradmin,
+        isSupport: req.userInfo.is_support,
+        message: req.userInfo.is_organiser 
+          ? "✅ You have organiser privileges" 
+          : "❌ You do NOT have organiser privileges. Contact admin to enable.",
+        roles: {
+          organiser: req.userInfo.is_organiser,
+          masteradmin: req.userInfo.is_masteradmin,
+          support: req.userInfo.is_support
+        }
+      });
+    } catch (error) {
+      console.error("[DEBUG] Error checking status:", error);
+      return res.status(500).json({ 
+        error: error.message,
+        message: "Error checking authentication status"
+      });
+    }
+});
+
 const normalizeJsonField = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -243,6 +278,8 @@ router.post(
         return res.status(400).json({ error: "Title is required and must be a non-empty string." });
       }
 
+      console.log("✅ Title validation passed:", title);
+
       // Generate slug-based ID from title
       let event_id = title
         ? title
@@ -262,38 +299,58 @@ router.post(
       const existingEvent = await queryOne("events", { where: { event_id } });
       if (existingEvent) {
         return res.status(400).json({
-          error: `An event with the title "${title}" already exists (ID: '${event_id}'). Please use a different title.`
+          error: `An event with the title "${title}" already exists. Please use a different title.`
         });
       }
+
+      console.log("✅ Event ID uniqueness checked");
 
       // Handle file uploads
       const files = req.files;
       
       // Upload Event Image
       if (files?.eventImage && files.eventImage[0]) {
-        // Removed try/catch to ensure errors bubble up to the user
-        console.log(`Attempting to upload eventImage: ${files.eventImage[0].originalname}`);
-        const result = await uploadFileToSupabase(files.eventImage[0], "event-images", event_id);
-        uploadedFilePaths.image = result?.publicUrl || null;
-        console.log(`Successfully uploaded event image: ${uploadedFilePaths.image}`);
+        try {
+          console.log(`📁 Uploading eventImage: ${files.eventImage[0].originalname}`);
+          const result = await uploadFileToSupabase(files.eventImage[0], "event-images", event_id);
+          uploadedFilePaths.image = result?.publicUrl || null;
+          console.log(`✅ Event image uploaded: ${uploadedFilePaths.image}`);
+        } catch (imgError) {
+          console.error("❌ Event image upload failed:", imgError.message);
+          throw new Error(`Failed to upload event image: ${imgError.message}`);
+        }
       } else {
-        console.warn("WARNING: No eventImage found in request files.");
+        console.log("⚠️  No event image provided (optional)");
       }
 
       // Upload Banner Image
       if (files?.bannerImage && files.bannerImage[0]) {
-          console.log(`Attempting to upload bannerImage: ${files.bannerImage[0].originalname}`);
+        try {
+          console.log(`📁 Uploading bannerImage: ${files.bannerImage[0].originalname}`);
           const result = await uploadFileToSupabase(files.bannerImage[0], "event-banners", event_id);
           uploadedFilePaths.banner = result?.publicUrl || null;
-          console.log(`Successfully uploaded banner image: ${uploadedFilePaths.banner}`);
+          console.log(`✅ Banner image uploaded: ${uploadedFilePaths.banner}`);
+        } catch (bannerError) {
+          console.error("❌ Banner image upload failed:", bannerError.message);
+          // Don't throw - banner is optional
+        }
+      } else {
+        console.log("⚠️  No banner image provided (optional)");
       }
 
       // Upload PDF
       if (files?.pdfFile && files.pdfFile[0]) {
-          console.log(`Attempting to upload pdfFile: ${files.pdfFile[0].originalname}`);
+        try {
+          console.log(`📁 Uploading pdfFile: ${files.pdfFile[0].originalname}`);
           const result = await uploadFileToSupabase(files.pdfFile[0], "event-pdfs", event_id);
           uploadedFilePaths.pdf = result?.publicUrl || null;
-          console.log(`Successfully uploaded PDF for event ${event_id}: ${uploadedFilePaths.pdf}`);
+          console.log(`✅ PDF uploaded: ${uploadedFilePaths.pdf}`);
+        } catch (pdfError) {
+          console.error("❌ PDF upload failed:", pdfError.message);
+          // Don't throw - PDF is optional
+        }
+      } else {
+        console.log("⚠️  No PDF provided (optional)");
       }
 
       // Parse and validate JSON fields
@@ -303,13 +360,13 @@ router.post(
       const parsedPrizes = parseJsonField(prizes, []);
       const parsedCustomFields = parseJsonField(req.body.custom_fields, []);
 
-      console.log("About to insert into database with params:", {
+      console.log("✅ JSON fields parsed successfully");
+      console.log("About to insert event into database with:", {
         event_id,
         title: title?.trim(),
-        description: description || null,
-        event_date: event_date || null,
-        max_participants_parsed: parseOptionalInt(max_participants, 1),
-        uploadedFiles: uploadedFilePaths
+        organizing_dept,
+        created_by: req.userInfo?.email,
+        fileUrls: uploadedFilePaths
       });
 
       // Insert event with creator's auth_uuid
@@ -337,9 +394,9 @@ router.post(
         organizer_phone: req.body.organizer_phone || null,
         whatsapp_invite_link: req.body.whatsapp_invite_link || null,
         organizing_dept: organizing_dept || null,
-        fest: fest || null,
-        created_by: req.body.created_by || req.userInfo?.email || req.userId, // Prefer email for created_by
-        auth_uuid: req.userId, // Store UUID in auth_uuid
+        fest_id: fest || null,
+        created_by: req.body.created_by || req.userInfo?.email || req.userId,
+        auth_uuid: req.userId,
         registration_deadline: req.body.registration_deadline || null,
         total_participants: 0,
         // Outsider & campus fields
@@ -353,8 +410,10 @@ router.post(
       }]);
 
       if (!created || created.length === 0) {
-        throw new Error("Event was not created successfully.");
+        throw new Error("Event was not created successfully (no rows returned from insert).");
       }
+
+      console.log("✅ Event inserted successfully:", event_id);
 
       // Send notifications to all users about the new event (non-blocking)
       sendBroadcastNotification({
@@ -398,14 +457,15 @@ router.post(
       });
 
     } catch (error) {
-      console.error("Server error POST /api/events:", error);
-      console.error("Error details:", {
+      console.error("❌ Server error POST /api/events:", error);
+      console.error("🔴 Detailed error info:", {
         message: error.message,
         stack: error.stack,
         code: error.code,
-        requestBody: Object.keys(req.body),
+        requestBodyKeys: Object.keys(req.body || {}),
         userId: req.userId,
-        userInfo: req.userInfo?.email
+        userEmail: req.userInfo?.email,
+        isOrganiser: req.userInfo?.is_organiser
       });
       
       // Clean up uploaded files on error
@@ -419,9 +479,21 @@ router.post(
         console.error("Error cleaning up files:", cleanupError);
       }
 
+      // Return detailed error information
+      let errorDetail = error.message || "Unknown error occurred";
+      
+      // Truncate stack trace for response
+      const stackLines = (error.stack || "").split("\n").slice(0, 3).join(" | ");
+      
       return res.status(500).json({ 
-        error: "Internal server error while creating event.",
-        details: error.message // Include error message for debugging
+        error: "Internal server error while creating event",
+        details: errorDetail,
+        context: {
+          endpoint: "/api/events",
+          method: "POST",
+          userId: req.userId,
+          timestamp: new Date().toISOString()
+        }
       });
     }
   }
@@ -562,7 +634,7 @@ router.put(
         organizer_phone: req.body.organizer_phone || null,
         whatsapp_invite_link: req.body.whatsapp_invite_link || null,
         organizing_dept: organizing_dept || null,
-        fest: fest || null,
+        fest_id: fest || null,
         registration_deadline: req.body.registration_deadline || null,
         // Preserve existing total_participants unless there is a specific admin action to modify it.
         // Include outsider-related settings so toggles persist from the client.
@@ -643,8 +715,27 @@ router.put(
       });
 
     } catch (error) {
-      console.error("Server error PUT /api/events/:eventId:", error);
-      return res.status(500).json({ error: "Internal server error while updating event." });
+      console.error("❌ Server error PUT /api/events/:eventId:", error);
+      console.error("🔴 Detailed error info:", {
+        message: error.message,
+        stack: error.stack,
+        code: error.code,
+        requestBodyKeys: Object.keys(req.body || {}),
+        userId: req.userId,
+        userEmail: req.userInfo?.email,
+        isOrganiser: req.userInfo?.is_organiser,
+        eventId: req.params.eventId
+      });
+      return res.status(500).json({ 
+        error: "Internal server error while updating event.",
+        details: error.message,
+        context: {
+          endpoint: `/api/events/${req.params.eventId}`,
+          method: "PUT",
+          userId: req.userId,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
   }
 );

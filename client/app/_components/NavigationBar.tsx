@@ -56,6 +56,7 @@ function NavigationBar() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const sessionDisplayName =
     session?.user?.user_metadata?.full_name ||
     session?.user?.user_metadata?.name ||
@@ -230,9 +231,12 @@ function NavigationBar() {
                     </Link>
                   )}
                   {/* CHANGED ORGANISED AND ADMIN BUTTON */}
-                  <Link href="/profile">
-  <div className="flex items-center gap-2 lg:gap-4 min-w-0">
-    <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden relative flex-shrink-0"> 
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                      className="flex items-center gap-2 lg:gap-4 min-w-0 cursor-pointer"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden relative flex-shrink-0"> 
                         {displayAvatar && !avatarLoadError ? (
                           <img
                             src={displayAvatar}
@@ -247,8 +251,24 @@ function NavigationBar() {
                           </div>
                         )}
                       </div>
-                    </div>
-                  </Link>
+                    </button>
+                    {showProfileDropdown && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
+                        <Link
+                          href="/profile"
+                          className="block px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-[#154CB3] transition-colors duration-200 first:rounded-t-lg"
+                        >
+                          View Profile
+                        </Link>
+                        <button
+                          onClick={handleSignOut}
+                          className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors duration-200 last:rounded-b-lg border-t"
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex gap-2 sm:gap-4 items-center flex-wrap justify-end">

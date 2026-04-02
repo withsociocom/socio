@@ -15,6 +15,7 @@ type OrganiserEvent = {
   category?: string | null;
   registration_fee?: number | string | null;
   registration_deadline?: string | null;
+  fest_id?: string | null;
   fest?: string | null;
   organizing_dept?: string | null;
   created_by: string;
@@ -244,7 +245,7 @@ export default function OrganiserHistoryModal({
       const { data, error: fetchError } = await supabase
         .from("events")
         .select(
-          "event_id, title, event_date, event_time, venue, category, registration_fee, registration_deadline, fest, organizing_dept, created_by, created_at"
+          "event_id, title, event_date, event_time, venue, category, registration_fee, registration_deadline, fest_id, fest, organizing_dept, created_by, created_at"
         )
         .eq("created_by", identifier)
         .order("created_at", { ascending: false });
@@ -264,7 +265,7 @@ export default function OrganiserHistoryModal({
     const { data, error: fetchError } = await supabase
       .from("events")
       .select(
-        "event_id, title, event_date, event_time, venue, category, registration_fee, registration_deadline, fest, organizing_dept, created_by, created_at"
+        "event_id, title, event_date, event_time, venue, category, registration_fee, registration_deadline, fest_id, fest, organizing_dept, created_by, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -707,7 +708,7 @@ export default function OrganiserHistoryModal({
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
                         <FolderKanban className="h-3 w-3" />
-                        {event.fest || "No Fest"}
+                        {event.fest_id || event.fest || "No Fest"}
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
                         <Building2 className="h-3 w-3" />

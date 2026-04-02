@@ -17,6 +17,7 @@ import {
   parseJsonField,
 } from "../utils/parsers.js";
 import { v4 as uuidv4 } from "uuid";
+import { authenticateUser, getUserInfo, requireMasterAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -101,8 +102,14 @@ router.get("/:eventId", async (req, res) => {
   }
 });
 
-// DELETE event
-router.delete("/:eventId", async (req, res) => {
+// DELETE event - REQUIRES MASTER ADMIN ROLE
+router.delete("/:eventId", (req, res, next) => {
+  return authenticateUser(req, res, () => {
+    getUserInfo()(req, res, () => {
+      requireMasterAdmin(req, res, next);
+    });
+  });
+}, async (req, res) => {
   const { eventId } = req.params;
 
   try {
@@ -239,7 +246,7 @@ router.post("/", multerUpload.fields([
         organizer_phone: eventData.organizerPhone || "",
         whatsapp_invite_link: eventData.whatsappInviteLink || "",
         organizing_dept: eventData.organizingDept,
-        fest: eventData.fest || null,
+        fest_id: eventData.fest_id || eventData.fest || null,
         registration_deadline: eventData.registrationDeadline || null,
         // Outsider registration fields
         allow_outsiders: eventData.allowOutsiders === "true" || eventData.allow_outsiders === true ? 1 : 0,

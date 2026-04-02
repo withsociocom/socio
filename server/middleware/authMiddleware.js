@@ -141,13 +141,22 @@ export const getUserInfo = () => {
  */
 export const requireOrganiser = (req, res, next) => {
   if (!req.userInfo) {
+    console.error("[ORGANISER CHECK] ❌ No req.userInfo available");
     return res.status(401).json({ error: 'User info not available' });
   }
 
+  console.log(`[ORGANISER CHECK] Checking user: ${req.userInfo.email}, is_organiser: ${req.userInfo.is_organiser}`);
+  
   if (!req.userInfo.is_organiser) {
-    return res.status(403).json({ error: 'Access denied: Organiser privileges required' });
+    console.warn(`[ORGANISER CHECK] ❌ User ${req.userInfo.email} is NOT an organiser. Access denied.`);
+    return res.status(403).json({ 
+      error: 'Access denied: Organiser privileges required',
+      userEmail: req.userInfo.email,
+      currentRole: 'regular_user'
+    });
   }
 
+  console.log(`[ORGANISER CHECK] ✅ User ${req.userInfo.email} IS an organiser. Proceeding.`);
   next();
 };
 

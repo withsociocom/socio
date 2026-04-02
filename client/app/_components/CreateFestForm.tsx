@@ -1082,22 +1082,23 @@ function CreateFestForm(props?: CreateFestProps) {
           },
         });
         
+        const uploadData = await uploadResponse.json();
+        
         if (!uploadResponse.ok) {
-          throw new Error('Failed to upload image to server');
+          throw new Error(uploadData?.message || uploadData?.error || 'Failed to upload image to server');
         }
-        
-        const uploadResult = await uploadResponse.json();
-        
-        if (!uploadResult || !uploadResult.url) {
-          throw new Error("Failed to get URL for the uploaded image.");
+
+        if (!uploadData || !uploadData.url) {
+          throw new Error("Upload succeeded but no URL returned. Please contact support.");
         }
         
         // Use the URL returned from our server API
-        uploadedFestImageUrl = uploadResult.url;
+        uploadedFestImageUrl = uploadData.url;
       } catch (uploadError: any) {
+        const errorMessage = uploadError.message || 'Unknown upload error';
         setErrors((prev) => ({
           ...prev,
-          submit: `Image upload failed: ${uploadError.message}. Please try again.`,
+          submit: `Image upload failed: ${errorMessage}`,
         }));
         setIsSubmitting(false);
         setIsUploadingImage(false);

@@ -5,6 +5,48 @@ import { useAuth } from "@/context/AuthContext";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/api\/?$/, "");
 
+// ─── LOCAL STORAGE + COOKIES HELPERS ───────────────────────────────────────
+// Store read notifications locally so they persist across refreshes
+
+const STORAGE_KEY = "socio_read_notifications";
+
+// Get all read notification IDs from localStorage
+const getReadNotificationsFromStorage = (): Set<string> => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return new Set(stored ? JSON.parse(stored) : []);
+  } catch {
+    return new Set();
+  }
+};
+
+// Save read notification ID to localStorage
+const addReadNotification = (notificationId: string, email?: string): void => {
+  if (typeof window === "undefined") return;
+  
+  try {
+    const readIds = getReadNotificationsFromStorage();
+    readIds.add(notificationId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(readIds)));
+    
+    // Also set cookie as backup (30 day expiry)
+    document.cookie = `notif_${notificationId}=read; max-age=2592000; path=/`;
+  } catch (error) {
+    console.error("Error saving to localStorage:", error);
+  }
+};
+
+// Mark all as read locally
+const markAllReadLocally = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([])); // Will be rebuilt below
+  } catch (error) {
+    console.error("Error marking all as read:", error);
+  }
+};
+
 export interface Notification {
   id: string;
   title: string;
@@ -54,18 +96,24 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
         const data = await response.json();
         const newNotifications = data.notifications || [];
         
+        // ─── APPLY LOCALSTORAGE FILTERING ───
+        // If notification ID is in localStorage, mark it as read locally
+        const readIds = getReadNotificationsFromStorage();
+        const filteredNotifications = newNotifications.map((n: Notification) => ({
+          ...n,
+          read: n.read || readIds.has(n.id) // Mark as read if in localStorage
+        }));
+        
         if (append) {
-          setNotifications(prev => [...prev, ...newNotifications]);
+          setNotifications(prev => [...prev, ...filteredNotifications]);
         } else {
-          setNotifications(newNotifications);
+          setNotifications(filteredNotifications);
         }
         
-        // Use server-provided unread count (accurate across all pages)
-        if (data.unreadCount !== undefined) {
-          setUnreadCount(data.unreadCount);
-        } else {
-          setUnreadCount(newNotifications.filter((n: Notification) => !n.read).length);
-        }
+        // Calculate unread count from filtered list
+        const unreadFromFiltered = filteredNotifications.filter((n: Notification) => !n.read).length;
+        setUnreadCount(unreadFromFiltered);
+        
         setHasMore(data.pagination?.hasMore || false);
         setTotalPages(data.pagination?.totalPages || 1);
         setCurrentPage(page);
@@ -93,11 +141,22 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
   }, [userData?.email, fetchNotifications]);
 
   // OPTIMIZATION: Memoize markAsRead with useCallback
-  const markAsRead = useCallback(async (notificationId: string) => {
-    if (!session?.access_token || !userData?.email) return;
-
-    try {
-      const response = await fetch(
+  const markAsRead = useCallback((notificationId: string) => {
+    // ─── SAVE TO LOCAL STORAGE IMMEDIATELY ───
+    // No need to wait for backend, mark locally first
+    addReadNotification(notificationId, userData?.email);
+    
+    // Update UI immediately (instant feedback)
+    setNotifications(prev =>
+      prev.map(n =>
+        n.id === notificationId ? { ...n, read: true } : n
+      )
+    );
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    
+    // Also sync to backend (non-blocking, optional)
+    if (session?.access_token && userData?.email) {
+      fetch(
         `${API_URL}/api/notifications/${notificationId}/read`,
         {
           method: "PATCH",
@@ -107,28 +166,26 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
           },
           body: JSON.stringify({ email: userData.email })
         }
-      );
-
-      if (response.ok) {
-        setNotifications(prev =>
-          prev.map(n =>
-            n.id === notificationId ? { ...n, read: true } : n
-          )
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
+      ).catch(err => console.error("Backend sync failed:", err));
     }
   }, [session?.access_token, userData?.email]);
 
   // OPTIMIZATION: Memoize markAllAsRead with useCallback
-  const markAllAsRead = useCallback(async () => {
-    if (!session?.access_token || !userData?.email) return;
+  const markAllAsRead = useCallback(() => {
+    if (notifications.length === 0) return;
 
-    try {
-      const email = userData.email;
-      const response = await fetch(
+    // ─── SAVE ALL TO LOCAL STORAGE ───
+    notifications.forEach(n => {
+      addReadNotification(n.id, userData?.email);
+    });
+
+    // Update UI immediately
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
+
+    // Also sync to backend (non-blocking)
+    if (session?.access_token && userData?.email) {
+      fetch(
         `${API_URL}/api/notifications/mark-read`,
         {
           method: "PATCH",
@@ -136,21 +193,17 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
             Authorization: `Bearer ${session.access_token}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ email: userData.email })
         }
-      );
-
-      if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        setUnreadCount(0);
-      }
-    } catch (error) {
-      console.error("Error marking all notifications as read:", error);
+      ).catch(err => console.error("Backend sync failed:", err));
     }
-  }, [session?.access_token, userData?.email]);
+  }, [notifications, session?.access_token, userData?.email]);
 
-  const clearAllNotifications = useCallback(async () => {
-    if (!session?.access_token || !userData?.email) return;
+  const clearAllNotifications = useCallback(() => {
+    // ─── CLEAR LOCAL STORAGE ───
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(STORAGE_KEY);
+    }
 
     // Optimistically clear UI
     setNotifications([]);
@@ -159,8 +212,9 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
     setTotalPages(1);
     setHasMore(false);
 
-    try {
-      await fetch(
+    // Also sync to backend (non-blocking)
+    if (session?.access_token && userData?.email) {
+      fetch(
         `${API_URL}/api/notifications/clear-all?email=${encodeURIComponent(userData.email)}`,
         {
           method: "DELETE",
@@ -168,13 +222,9 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
             Authorization: `Bearer ${session.access_token}`,
           },
         }
-      );
-    } catch (error) {
-      console.error("Error clearing notifications:", error);
-      // Refetch on failure to restore
-      fetchNotifications();
+      ).catch(err => console.error("Backend sync failed:", err));
     }
-  }, [session?.access_token, userData?.email, fetchNotifications]);
+  }, [session?.access_token, userData?.email]);
 
   const deleteNotification = async (notificationId: string) => {
     if (!session?.access_token) return;
