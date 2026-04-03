@@ -183,7 +183,8 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     setUnreadCount(0);
 
-    // Also sync to backend and refetch to ensure state is correct
+    // Sync to backend (non-blocking)
+    // Next polling cycle will confirm state from server
     if (session?.access_token && userData?.email) {
       fetch(
         `${API_URL}/api/notifications/mark-read`,
@@ -195,29 +196,34 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
           },
           body: JSON.stringify({ email: userData.email })
         }
-      )
-      .then(() => {
-        // After backend sync, refetch to ensure UI matches backend state
-        setTimeout(() => fetchNotifications(), 500);
-      })
-      .catch(err => console.error("Backend sync failed:", err));
+      ).catch(err => console.error("Backend sync failed:", err));
     }
-  }, [notifications, session?.access_token, userData?.email, fetchNotifications]);
+  }, [notifications, session?.access_token, userData?.email]);
 
   const clearAllNotifications = useCallback(() => {
-    // ─── CLEAR LOCAL STORAGE ───
+    // ─── CLEAR LOCAL STORAGE AND MARK ALL AS DISMISSED ───
     if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
+      // Save all notification IDs as "read/dismissed" in localStorage
+      // This ensures even if backend deletion is delayed, they won't show on refresh
+      const allIds = notifications.map(n => n.id);
+      if (allIds.length > 0) {
+        const readIds = getReadNotificationsFromStorage();
+        allIds.forEach(id => readIds.add(id));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(readIds)));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
     }
 
-    // Optimistically clear UI
+    // Optimistically clear UI immediately for instant feedback
     setNotifications([]);
     setUnreadCount(0);
     setCurrentPage(1);
     setTotalPages(1);
     setHasMore(false);
 
-    // Also sync to backend and refetch to ensure state is correct
+    // Sync to backend (non-blocking)
+    // Next polling cycle will confirm state from server
     if (session?.access_token && userData?.email) {
       fetch(
         `${API_URL}/api/notifications/clear-all?email=${encodeURIComponent(userData.email)}`,
@@ -227,14 +233,9 @@ const NotificationSystemComponent: React.FC<NotificationSystemProps> = ({
             Authorization: `Bearer ${session.access_token}`,
           },
         }
-      )
-      .then(() => {
-        // After backend sync, refetch to ensure UI matches backend state
-        setTimeout(() => fetchNotifications(), 500);
-      })
-      .catch(err => console.error("Backend sync failed:", err));
+      ).catch(err => console.error("Backend sync failed:", err));
     }
-  }, [session?.access_token, userData?.email, fetchNotifications]);
+  }, [notifications, session?.access_token, userData?.email]);
 
   const deleteNotification = async (notificationId: string) => {
     if (!session?.access_token) return;
