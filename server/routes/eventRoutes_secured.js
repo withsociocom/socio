@@ -701,6 +701,9 @@ router.put(
           } else {
             console.warn(`⚠️ Event image upload returned no URL - keeping existing image`);
           }
+        } else if (req.body.removeImageFile === "true") {
+          console.log(`🗑️ Event image removal requested.`);
+          uploadedFilePaths.image = null;
         }
 
         if (files?.bannerImage && files.bannerImage[0]) {
@@ -712,6 +715,9 @@ router.put(
           } else {
             console.warn(`⚠️ Banner image upload returned no URL - keeping existing banner`);
           }
+        } else if (req.body.removeBannerFile === "true") {
+          console.log(`🗑️ Banner image removal requested.`);
+          uploadedFilePaths.banner = null;
         }
         
         if (files?.pdfFile && files.pdfFile[0]) {
@@ -723,6 +729,9 @@ router.put(
           } else {
             console.warn(`⚠️ PDF upload returned no URL - keeping existing PDF`);
           }
+        } else if (req.body.removePdfFile === "true") {
+          console.log(`🗑️ PDF removal requested.`);
+          uploadedFilePaths.pdf = null;
         }
       } catch (fileError) {
         console.error("❌ File upload error during event update:", fileError.message);
