@@ -679,28 +679,42 @@ router.put(
         pdf: event.pdf_url,
       };
 
+      console.log("📁 Initial file paths from existing event:");
+      console.log(`  image: ${uploadedFilePaths.image}`);
+      console.log(`  banner: ${uploadedFilePaths.banner}`);
+      console.log(`  pdf: ${uploadedFilePaths.pdf}`);
+
       // Handle file uploads if new files are provided
       try {
         if (files?.eventImage && files.eventImage[0]) {
-          // Delete old image if exists (optional extended feature: strictly clean up old files)
-          // Here we just overwrite the reference
+          console.log(`📤 Uploading new event image: ${files.eventImage[0].originalname}`);
           const result = await uploadFileToSupabase(files.eventImage[0], "event-images", eventId);
+          console.log(`✅ Event image uploaded successfully: ${result?.publicUrl}`);
           uploadedFilePaths.image = result?.publicUrl || null;
         }
 
         if (files?.bannerImage && files.bannerImage[0]) {
+          console.log(`📤 Uploading new banner image: ${files.bannerImage[0].originalname}`);
           const result = await uploadFileToSupabase(files.bannerImage[0], "event-banners", eventId);
+          console.log(`✅ Banner image uploaded successfully: ${result?.publicUrl}`);
           uploadedFilePaths.banner = result?.publicUrl || null;
         }
         
         if (files?.pdfFile && files.pdfFile[0]) {
+          console.log(`📤 Uploading new PDF: ${files.pdfFile[0].originalname}`);
           const result = await uploadFileToSupabase(files.pdfFile[0], "event-pdfs", eventId);
+          console.log(`✅ PDF uploaded successfully: ${result?.publicUrl}`);
           uploadedFilePaths.pdf = result?.publicUrl || null;
         }
       } catch (fileError) {
         console.error("❌ File upload error during event update:", fileError.message);
         throw fileError; // Re-throw to be caught by main try-catch
       }
+
+      console.log("📁 Updated file paths after upload:");
+      console.log(`  image: ${uploadedFilePaths.image}`);
+      console.log(`  banner: ${uploadedFilePaths.banner}`);
+      console.log(`  pdf: ${uploadedFilePaths.pdf}`);
 
       const {
         title,
@@ -800,6 +814,11 @@ router.put(
         updated_at: new Date().toISOString()
         // NOTE: 'updated_by' column does not exist in events table - removed
       };
+
+      console.log("🔄 UPDATE DATA - File URLs being saved to database:");
+      console.log(`  event_image_url: ${updateData.event_image_url}`);
+      console.log(`  banner_url: ${updateData.banner_url}`);
+      console.log(`  pdf_url: ${updateData.pdf_url}`);
 
       // If event_id changed, update related records first
       if (newEventId !== eventId) {
