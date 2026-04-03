@@ -4,6 +4,160 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const PLATFORM_NAME = 'SOCIO';
+const PLATFORM_URL = process.env.PUBLIC_APP_URL || 'https://socio.christuniversity.in';
+const SUPPORT_EMAIL = process.env.EMAIL_REPLY_TO || 'support@socio.christuniversity.in';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'SOCIO <noreply@socio.christuniversity.in>';
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getFirstName(name) {
+  const firstName = (name || '').trim().split(/\s+/)[0];
+  return escapeHtml(firstName || 'there');
+}
+
+function formatDate(value, includeTime = false) {
+  if (!value) return 'To be announced';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    ...(includeTime ? { timeStyle: 'short' } : {}),
+  }).format(date);
+}
+
+function buildEmailShell({ preheader, eyebrow, title, intro, sections = [], ctaLabel, ctaUrl, footerNote }) {
+  const sectionHtml = sections
+    .map((section) => `
+      <tr>
+        <td style="padding: 0 0 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: separate; border-spacing: 0; background: ${section.background || '#f8fafc'}; border: 1px solid ${section.border || '#e2e8f0'}; border-radius: 16px;">
+            <tr>
+              <td style="padding: 18px 20px;">
+                ${section.heading ? `<p style="margin: 0 0 8px 0; color: ${section.headingColor || '#0f172a'}; font-size: 14px; font-weight: 700; letter-spacing: 0.02em;">${section.heading}</p>` : ''}
+                ${section.body}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="x-apple-disable-message-reformatting">
+      <title>${escapeHtml(title)}</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#eef2ff; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+      <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all; color:transparent;">${escapeHtml(preheader)}</div>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; background-color:#eef2ff; width:100%;">
+        <tr>
+          <td align="center" style="padding:32px 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px; border-collapse:separate; border-spacing:0;">
+              <tr>
+                <td style="padding:0 8px 16px 8px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate; border-spacing:0; background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #2563eb 100%); border-radius:24px 24px 0 0;">
+                    <tr>
+                      <td align="center" style="padding:28px 24px;">
+                        <div style="display:inline-block; border:1px solid rgba(255,255,255,0.18); color:#fff; background: rgba(255,255,255,0.08); border-radius:999px; padding:6px 12px; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; font-weight:700;">${escapeHtml(eyebrow || PLATFORM_NAME)}</div>
+                        <h1 style="margin:14px 0 0 0; color:#ffffff; font-size:34px; line-height:1.15; font-weight:800; letter-spacing:-0.03em;">${escapeHtml(title)}</h1>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 8px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate; border-spacing:0; background:#ffffff; border-radius:0 0 24px 24px; box-shadow:0 18px 50px rgba(15, 23, 42, 0.12);">
+                    <tr>
+                      <td style="padding:36px 28px 28px 28px; font-family:Arial, Helvetica, sans-serif;">
+                        <p style="margin:0 0 12px 0; color:#334155; font-size:18px; line-height:1.7;">${intro}</p>
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin-top:24px;">
+                          <tbody>
+                            ${sectionHtml}
+                          </tbody>
+                        </table>
+
+                        ${ctaLabel && ctaUrl ? `
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:28px;">
+                            <tr>
+                              <td align="center">
+                                <a href="${escapeHtml(ctaUrl)}" style="display:inline-block; background:#1d4ed8; color:#ffffff; text-decoration:none; font-size:15px; font-weight:700; padding:14px 24px; border-radius:999px; box-shadow:0 8px 18px rgba(29, 78, 216, 0.22);">${escapeHtml(ctaLabel)}</a>
+                              </td>
+                            </tr>
+                          </table>
+                        ` : ''}
+
+                        <p style="margin:28px 0 0 0; color:#64748b; font-size:13px; line-height:1.7; text-align:center;">
+                          ${escapeHtml(footerNote || `Need help? Contact ${SUPPORT_EMAIL}.`)}
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 28px 28px 28px; font-family:Arial, Helvetica, sans-serif;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse; border-top:1px solid #e2e8f0;">
+                          <tr>
+                            <td style="padding-top:18px; color:#94a3b8; font-size:12px; line-height:1.7; text-align:center;">
+                              ${PLATFORM_NAME} · <a href="${escapeHtml(PLATFORM_URL)}" style="color:#64748b; text-decoration:none;">${escapeHtml(PLATFORM_URL.replace(/^https?:\/\//, ''))}</a><br>
+                              This is a transactional email related to your ${PLATFORM_NAME} account.
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
+function buildTextShell({ title, intro, sections = [], ctaLabel, ctaUrl, footerNote }) {
+  const sectionText = sections
+    .map((section) => {
+      const heading = section.heading ? `${section.heading}\n` : '';
+      const body = section.text || '';
+      return `${heading}${body}`.trim();
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return [
+    title,
+    '',
+    intro,
+    '',
+    sectionText,
+    ctaLabel && ctaUrl ? `${ctaLabel}: ${ctaUrl}` : '',
+    '',
+    footerNote || `Need help? Contact ${SUPPORT_EMAIL}.`,
+    '',
+    PLATFORM_NAME,
+    PLATFORM_URL,
+    'This is a transactional email related to your SOCIO account.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
 /**
  * Send a welcome email to new users
@@ -15,117 +169,71 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 export async function sendWelcomeEmail(email, name, isOutsider = false, visitorId = null) {
   if (!resend) { console.warn('⚠️ Resend not configured — skipping welcome email'); return { success: true }; }
   try {
-    const firstName = name ? name.split(' ')[0] : 'there';
-    
-    const outsiderSection = isOutsider && visitorId ? `
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-        <p style="color: #64748b; font-size: 12px; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">Your Visitor ID</p>
-        <p style="color: #063168; font-size: 28px; font-weight: 700; margin: 0; letter-spacing: 2px; font-family: 'Courier New', monospace;">${visitorId}</p>
-        <p style="color: #94a3b8; font-size: 13px; margin: 12px 0 0 0;">Keep this safe — you'll need it for event registrations.</p>
-      </div>
-      <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px 20px; margin-bottom: 24px;">
-        <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.5;">
-          <strong>Tip:</strong> Visit your profile to set your display name. This can only be done once.
-        </p>
-      </div>
-    ` : '';
+    const firstName = getFirstName(name);
+    const intro = `Welcome to ${PLATFORM_NAME}, ${firstName}. Your account is ready, and you can start discovering campus events right away.`;
+    const sections = isOutsider && visitorId
+      ? [
+          {
+            heading: 'Your Visitor ID',
+            body: `
+              <p style="margin:0; color:#334155; font-size:15px; line-height:1.7;">Keep this ID safe. You may need it when registering for events.</p>
+              <p style="margin:14px 0 0 0; color:#1d4ed8; font-size:24px; font-weight:800; letter-spacing:0.12em; font-family:Arial, Helvetica, sans-serif;">${escapeHtml(visitorId)}</p>
+            `,
+            text: `Your Visitor ID: ${visitorId}\nKeep this ID safe. You may need it when registering for events.`,
+          },
+          {
+            heading: 'Next step',
+            background: '#fff7ed',
+            border: '#fed7aa',
+            body: `
+              <p style="margin:0; color:#9a3412; font-size:15px; line-height:1.7;">Visit your profile to set your display name. This can only be changed once.</p>
+            `,
+            text: 'Visit your profile to set your display name. This can only be changed once.',
+          },
+        ]
+      : [
+          {
+            heading: 'What you can do now',
+            body: `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                <tr>
+                  <td style="padding:0 0 10px 0; color:#334155; font-size:15px; line-height:1.7;">Discover events across campus</td>
+                </tr>
+                <tr>
+                  <td style="padding:0 0 10px 0; color:#334155; font-size:15px; line-height:1.7;">Register in a few steps</td>
+                </tr>
+                <tr>
+                  <td style="padding:0; color:#334155; font-size:15px; line-height:1.7;">Receive updates and reminders</td>
+                </tr>
+              </table>
+            `,
+            text: 'Discover events across campus. Register in a few steps. Receive updates and reminders.',
+          },
+        ];
 
-    const memberSection = !isOutsider ? `
-      <div style="background: #f0f9ff; border-left: 4px solid #154CB3; padding: 20px; margin: 24px 0;">
-        <p style="color: #1e40af; font-weight: 600; font-size: 15px; margin: 0 0 8px 0;">You're all set! 🎉</p>
-        <p style="color: #475569; font-size: 14px; margin: 0; line-height: 1.6;">
-          Discover events, register instantly, and get updates directly — no middlemen, no hassle.
-        </p>
-      </div>
-    ` : '';
+    const htmlContent = buildEmailShell({
+      preheader: `Your ${PLATFORM_NAME} account is ready. Start exploring events now.`,
+      eyebrow: 'Account ready',
+      title: `Welcome, ${firstName}`,
+      intro,
+      sections,
+      ctaLabel: 'Browse events',
+      ctaUrl: `${PLATFORM_URL}/Discover`,
+      footerNote: `If you need help, reply to this email or contact ${SUPPORT_EMAIL}.`,
+    });
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 0;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #063168 0%, #154CB3 100%); border-radius: 16px 16px 0 0; padding: 40px 32px; text-align: center;">
-          <h1 style="color: white; font-size: 42px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -1px;">SOCIO</h1>
-          <p style="color: rgba(255,255,255,0.9); font-size: 16px; margin: 0; font-weight: 400;">
-            Campus Events Platform
-          </p>
-        </div>
-        
-        <!-- Body -->
-        <div style="background: white; padding: 40px 36px; border-radius: 0 0 16px 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);">
-          
-          <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 8px 0; font-weight: 600;">
-            Welcome, ${firstName}
-          </h2>
-          <p style="color: #64748b; font-size: 15px; margin: 0 0 24px 0;">
-            Thank you for joining SOCIO <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">BETA</span>
-          </p>
-          
-          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">
-            SOCIO is your gateway to campus events, club activities, and community experiences. 
-            Whether you're looking to discover events or organize your own, we're here to help you connect.
-          </p>
-          
-          ${outsiderSection}
-          ${memberSection}
-          
-          <!-- CTA Button -->
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="https://socio.christuniversity.in/Discover" 
-               style="display: inline-block; background: #154CB3; 
-                      color: white; text-decoration: none; padding: 14px 36px; border-radius: 8px; 
-                      font-weight: 600; font-size: 15px;">
-              Browse Events
-            </a>
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 32px 0;">
-          
-          <p style="color: #94a3b8; font-size: 13px; margin: 0; text-align: center; line-height: 1.6;">
-            Need help? <a href="https://socio.christuniversity.in/support" style="color: #154CB3; text-decoration: none;">Contact our support</a>
-          </p>
-        </div>
-        
-        <!-- Footer -->
-        <div style="text-align: center; padding: 24px; color: #94a3b8; font-size: 12px;">
-          <p style="margin: 0 0 8px 0;">
-            SOCIO Team
-          </p>
-          <p style="margin: 0;">
-            <a href="https://socio.christuniversity.in" style="color: #64748b; text-decoration: none;">socio.christuniversity.in</a>
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
-
-    // Plain text version for better deliverability
-    const textContent = `
-Welcome, ${firstName}
-
-Thank you for joining SOCIO (Beta).
-
-SOCIO is your gateway to campus events, club activities, and community experiences. Whether you're looking to discover events or organize your own, we're here to help you connect.
-
-${isOutsider && visitorId ? `Your Visitor ID: ${visitorId}\nKeep this safe — you'll need it for event registrations.\n\nTip: Visit your profile to set your display name. This can only be done once.` : `You're all set! Discover events, register instantly, and get updates directly — no middlemen, no hassle.`}
-
-Browse events: https://socio.christuniversity.in/Discover
-
-Need help? Contact our support: https://socio.christuniversity.in/support
-
-SOCIO Team
-https://socio.christuniversity.in
-    `.trim();
+    const textContent = buildTextShell({
+      title: `Welcome, ${firstName}`,
+      intro,
+      sections,
+      ctaLabel: 'Browse events',
+      ctaUrl: `${PLATFORM_URL}/Discover`,
+      footerNote: `If you need help, reply to this email or contact ${SUPPORT_EMAIL}.`,
+    });
 
     const { data, error } = await resend.emails.send({
-      from: 'SOCIO <hello@withsocio.com>',
+      from: FROM_EMAIL,
+      replyTo: SUPPORT_EMAIL,
       to: [email],
       subject: `Welcome to SOCIO, ${firstName}`,
       html: htmlContent,
@@ -159,21 +267,23 @@ https://socio.christuniversity.in
 export async function sendRegistrationEmail(email, name, event, registrationId, qrImageBase64 = null) {
   if (!resend) { console.warn('⚠️ Resend not configured — skipping registration email'); return { success: true }; }
   try {
-    const firstName = name ? name.split(' ')[0] : 'there';
-    const ticketUrl = `https://socio.christuniversity.in/profile`;
+    const firstName = getFirstName(name);
+    const eventTitle = escapeHtml(event?.title || 'your event');
+    const eventDate = formatDate(event?.event_date);
+    const eventTime = event?.event_time ? formatDate(`${event.event_date || ''} ${event.event_time}`, true) : null;
+    const eventVenue = escapeHtml(event?.venue || 'To be announced');
+    const ticketUrl = `${PLATFORM_URL}/profile`;
 
-    // Build inline QR attachment if image provided
     let qrAttachments = [];
-    let qrHtmlBlock = `
-      <div style="text-align: center; margin: 24px 0;">
-        <a href="${ticketUrl}" style="display: inline-block; background: #154CB3; color: white; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 14px;">
-          View My Ticket &amp; QR Code
-        </a>
+    let qrSectionText = `View your ticket: ${ticketUrl}`;
+    let qrSectionBody = `
+      <p style="margin:0; color:#334155; font-size:15px; line-height:1.7;">Open your profile to view your ticket and QR code before the event.</p>
+      <div style="text-align:center; margin-top:18px;">
+        <a href="${escapeHtml(ticketUrl)}" style="display:inline-block; background:#1d4ed8; color:#ffffff; text-decoration:none; padding:14px 24px; border-radius:999px; font-size:15px; font-weight:700;">View ticket</a>
       </div>
     `;
 
     if (qrImageBase64) {
-      // Strip the data URL prefix to get raw base64
       const base64Data = qrImageBase64.replace(/^data:image\/png;base64,/, '');
       qrAttachments = [{
         filename: 'entry-qr.png',
@@ -181,71 +291,91 @@ export async function sendRegistrationEmail(email, name, event, registrationId, 
         content_id: 'entryqr',
         content_disposition: 'inline',
       }];
-      qrHtmlBlock = `
-        <div style="text-align: center; margin: 28px 0;">
-          <p style="color: #475569; font-size: 14px; margin: 0 0 16px 0; font-weight: 600;">Your Entry QR Code</p>
-          <div style="display: inline-block; background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px;">
-            <img src="cid:entryqr" width="180" height="180" alt="Entry QR Code" style="display: block;" />
-          </div>
-          <p style="color: #94a3b8; font-size: 12px; margin: 12px 0 0 0;">Show this QR code at the event entrance</p>
-          <div style="margin-top: 16px;">
-            <a href="${ticketUrl}" style="color: #154CB3; font-size: 13px; text-decoration: none; font-weight: 500;">
-              View full ticket on SOCIO →
-            </a>
+      qrSectionBody = `
+        <p style="margin:0 0 16px 0; color:#334155; font-size:15px; line-height:1.7; text-align:center;">Show this QR code at the event entrance.</p>
+        <div style="text-align:center; margin:0 0 16px 0;">
+          <div style="display:inline-block; background:#ffffff; border:1px solid #dbe4f0; border-radius:18px; padding:14px; box-shadow:0 8px 24px rgba(15,23,42,0.06);">
+            <img src="cid:entryqr" width="180" height="180" alt="Entry QR Code" style="display:block; border:0; outline:none; text-decoration:none;" />
           </div>
         </div>
+        <div style="text-align:center;">
+          <a href="${escapeHtml(ticketUrl)}" style="display:inline-block; color:#1d4ed8; font-size:13px; text-decoration:none; font-weight:700;">View full ticket on SOCIO →</a>
+        </div>
       `;
+      qrSectionText = `Show this QR code at the event entrance. View full ticket: ${ticketUrl}`;
     }
 
+    const intro = `Your registration for ${eventTitle} is confirmed. Keep this message for your records.`;
+
+    const sections = [
+      {
+        heading: 'Registration details',
+        body: `
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+            <tr>
+              <td style="padding:0 0 10px 0; color:#64748b; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; width:38%;">Event</td>
+              <td style="padding:0 0 10px 0; color:#0f172a; font-size:15px; line-height:1.6;">${eventTitle}</td>
+            </tr>
+            <tr>
+              <td style="padding:0 0 10px 0; color:#64748b; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Date</td>
+              <td style="padding:0 0 10px 0; color:#0f172a; font-size:15px; line-height:1.6;">${escapeHtml(eventDate)}</td>
+            </tr>
+            ${eventTime ? `
+              <tr>
+                <td style="padding:0 0 10px 0; color:#64748b; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Time</td>
+                <td style="padding:0 0 10px 0; color:#0f172a; font-size:15px; line-height:1.6;">${escapeHtml(eventTime)}</td>
+              </tr>
+            ` : ''}
+            <tr>
+              <td style="padding:0 0 10px 0; color:#64748b; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Venue</td>
+              <td style="padding:0 0 10px 0; color:#0f172a; font-size:15px; line-height:1.6;">${eventVenue}</td>
+            </tr>
+            <tr>
+              <td style="padding:0; color:#64748b; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Registration ID</td>
+              <td style="padding:0; color:#1d4ed8; font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif; font-weight:700;">${escapeHtml(registrationId)}</td>
+            </tr>
+          </table>
+        `,
+        text: `Event: ${event?.title || 'your event'}\nDate: ${event?.event_date || 'To be announced'}${event?.event_time ? `\nTime: ${event.event_time}` : ''}\nVenue: ${event?.venue || 'To be announced'}\nRegistration ID: ${registrationId}`,
+      },
+      {
+        heading: 'Your ticket',
+        background: '#f8fafc',
+        body: qrSectionBody,
+        text: qrSectionText,
+      },
+      {
+        heading: 'Before the event',
+        body: `
+          <p style="margin:0; color:#334155; font-size:15px; line-height:1.7;">If event details change, the event page will be updated. Please check it closer to the date for the latest information.</p>
+        `,
+        text: 'If event details change, the event page will be updated. Please check it closer to the date for the latest information.',
+      },
+    ];
+    
     const emailPayload = {
-      from: 'SOCIO <hello@withsocio.com>',
+      from: FROM_EMAIL,
+      replyTo: SUPPORT_EMAIL,
       to: [email],
-      subject: `Your Ticket - ${event.title}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 0;">
-          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-            <div style="background: linear-gradient(135deg, #063168 0%, #154CB3 100%); border-radius: 16px 16px 0 0; padding: 32px; text-align: center;">
-              <img src="https://socio.christuniversity.in/images/withsocio.png" alt="SOCIO" width="140" height="auto" style="display: block; margin: 0 auto; max-width: 140px;">
-            </div>
-            <div style="background: white; padding: 40px 36px; border-radius: 0 0 16px 16px;">
-              <h2 style="color: #1e293b; font-size: 22px; margin: 0 0 8px 0;">Registration Confirmed</h2>
-              <p style="color: #64748b; font-size: 15px; margin: 0 0 24px 0;">Hi ${firstName}, you're registered!</p>
-
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 0 0 24px 0;">
-                <p style="margin: 0 0 12px 0;"><strong style="color: #475569;">Event:</strong> <span style="color: #1e293b;">${event.title}</span></p>
-                <p style="margin: 0 0 12px 0;"><strong style="color: #475569;">Date:</strong> <span style="color: #1e293b;">${event.event_date || 'To be announced'}</span></p>
-                <p style="margin: 0 0 12px 0;"><strong style="color: #475569;">Venue:</strong> <span style="color: #1e293b;">${event.venue || 'To be announced'}</span></p>
-                <p style="margin: 0;"><strong style="color: #475569;">Registration ID:</strong> <span style="color: #063168; font-family: monospace; font-weight: 600; font-size: 13px;">${registrationId}</span></p>
-              </div>
-
-              ${qrHtmlBlock}
-
-              <!-- Beta Notice -->
-              <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 10px; padding: 20px; margin: 24px 0 0 0;">
-                <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.6; text-align: center;">
-                  <strong style="display: block; margin-bottom: 8px;">Beta Preview</strong>
-                  This is a preview version of SOCIO. We sincerely apologize for any inconvenience caused due to technical glitches. We're working hard to improve your experience every day.
-                </p>
-                <p style="color: #b45309; font-size: 12px; margin: 12px 0 0 0; text-align: center; font-style: italic;">
-                  Thank you for your patience and support!<br>
-                  — With love, Team SOCIO
-                </p>
-              </div>
-            </div>
-            <div style="text-align: center; padding: 24px; color: #94a3b8; font-size: 12px;">
-              <p style="margin: 0;">SOCIO Team | <a href="https://socio.christuniversity.in" style="color: #64748b; text-decoration: none;">socio.christuniversity.in</a></p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-      text: `Registration Confirmed\n\nHi ${firstName}, you're registered for ${event.title}.\n\nEvent: ${event.title}\nDate: ${event.event_date || 'To be announced'}\nVenue: ${event.venue || 'To be announced'}\nRegistration ID: ${registrationId}\n\nView your ticket: ${ticketUrl}\n\nSOCIO Team\nhttps://socio.christuniversity.in`,
+      subject: `Registration confirmed for ${event?.title || 'your event'}`,
+      html: buildEmailShell({
+        preheader: `Your registration for ${event?.title || 'the event'} is confirmed.`,
+        eyebrow: 'Registration confirmed',
+        title: `Hello, ${firstName}`,
+        intro,
+        sections,
+        ctaLabel: 'View event details',
+        ctaUrl: `${PLATFORM_URL}/event/${event?.event_id || event?.id || ''}`.replace(/\/$/, ''),
+        footerNote: `If anything looks incorrect, reply to this email or contact ${SUPPORT_EMAIL}.`,
+      }),
+      text: buildTextShell({
+        title: `Hello, ${firstName}`,
+        intro,
+        sections,
+        ctaLabel: 'View event details',
+        ctaUrl: `${PLATFORM_URL}/event/${event?.event_id || event?.id || ''}`.replace(/\/$/, ''),
+        footerNote: `If anything looks incorrect, reply to this email or contact ${SUPPORT_EMAIL}.`,
+      }),
     };
 
     if (qrAttachments.length > 0) {
