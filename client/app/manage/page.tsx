@@ -267,7 +267,7 @@ const MappedEventCard = ({
         </p>
         {isArchived && archiveSource === "auto" && (
           <p className="text-xs font-semibold text-amber-700 mt-2">
-            Auto-archived after event end date.
+            Auto-archived after event end date. <span className="text-amber-600">You can still unarchive if needed.</span>
           </p>
         )}
       </div>

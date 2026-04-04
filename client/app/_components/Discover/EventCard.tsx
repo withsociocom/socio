@@ -281,7 +281,7 @@ export const EventCard = ({
                 {isArchiveLoading ? "Saving..." : isArchived ? "Unarchive" : "Archive"}
               </button>
             )}
-            {authToken && baseUrl === "edit/event" && (
+            {authToken && (
               <EventReminderButton
                 eventId={eventSlug || ""}
                 eventTitle={title}
