@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { EventCard } from "../Discover/EventCard";
 import Link from "next/link";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import {
@@ -24,10 +22,13 @@ const UpcomingEvents = () => {
   const isAdminOrOrganizer = userData?.is_organiser || (userData as any)?.is_admin;
 
   // Filter out archived events for normal users
-  const filteredUpcomingEvents = upcomingEvents.filter(event => {
-    if (isAdminOrOrganizer) return true;
-    return !event.is_archived;
-  });
+  const filteredUpcomingEvents = useMemo(() =>
+    upcomingEvents.filter(event => {
+      if (isAdminOrOrganizer) return true;
+      return !event.is_archived;
+    }),
+    [upcomingEvents, isAdminOrOrganizer]
+  );
 
   const handleToggleArchive = async (eventId: string, shouldArchive: boolean) => {
     if (!session?.access_token) {
@@ -72,52 +73,42 @@ const UpcomingEvents = () => {
   };
 
   useEffect(() => {
-    if (isLoadingContext || filteredUpcomingEvents.length === 0) return;
-
-    gsap.registerPlugin(ScrollTrigger);
-
+    // Added simple mount animation using CSS transitions
     const cards = eventsRef.current?.querySelectorAll(
       ".event-card-wrapper"
     ) as NodeListOf<HTMLElement>;
 
-    cards?.forEach((card: HTMLElement, index: number) => {
-      gsap.from(card, {
-        opacity: 0,
-        y: 50,
-        duration: 0.8,
-        delay: index * 0.2,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: card,
-          start: "top 90%",
-        },
-      });
+    cards?.forEach((card: HTMLElement) => {
+      card.style.opacity = "1";
+    });
 
-      const onMouseEnter = () =>
-        gsap.to(card, { y: -4, duration: 0.25, ease: "power2.out" });
-      const onMouseLeave = () =>
-        gsap.to(card, { y: 0, duration: 0.25, ease: "power2.out" });
+    // Simple hover effect without GSAP
+    const onMouseEnter = (card: HTMLElement) => () => {
+      card.style.transform = "translateY(-4px)";
+      card.style.transition = "transform 0.25s ease-out";
+    };
 
-      card.addEventListener("mouseenter", onMouseEnter);
-      card.addEventListener("mouseleave", onMouseLeave);
+    const onMouseLeave = (card: HTMLElement) => () => {
+      card.style.transform = "translateY(0)";
+      card.style.transition = "transform 0.25s ease-out";
+    };
 
-      (card as any)._gsapListeners = { onMouseEnter, onMouseLeave };
+    cards?.forEach((card: HTMLElement) => {
+      const enter = onMouseEnter(card);
+      const leave = onMouseLeave(card);
+      card.addEventListener("mouseenter", enter);
+      card.addEventListener("mouseleave", leave);
+
+      (card as any)._listeners = { enter, leave };
     });
 
     return () => {
       cards?.forEach((card: HTMLElement) => {
-        gsap.killTweensOf(card);
-        ScrollTrigger.getAll().forEach((trigger) => {
-          if (trigger.trigger === card) {
-            trigger.kill();
-          }
-        });
-
-        const listeners = (card as any)._gsapListeners;
+        const listeners = (card as any)._listeners;
         if (listeners) {
-          card.removeEventListener("mouseenter", listeners.onMouseEnter);
-          card.removeEventListener("mouseleave", listeners.onMouseLeave);
-          delete (card as any)._gsapListeners;
+          card.removeEventListener("mouseenter", listeners.enter);
+          card.removeEventListener("mouseleave", listeners.leave);
+          delete (card as any)._listeners;
         }
       });
     };
@@ -155,6 +146,31 @@ const UpcomingEvents = () => {
       ref={eventsRef}
       className="flex flex-col items-center justify-center w-full mt-8 sm:mt-12 md:mt-16 mb-8 sm:mb-12 md:mb-16"
     >
+      <style>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .event-card-wrapper {
+          animation: fadeInUp 0.4s ease-out forwards;
+          opacity: 0;
+        }
+        .event-card-wrapper:nth-child(1) {
+          animation-delay: 0.05s;
+        }
+        .event-card-wrapper:nth-child(2) {
+          animation-delay: 0.1s;
+        }
+        .event-card-wrapper:nth-child(3) {
+          animation-delay: 0.15s;
+        }
+      `}</style>
       <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#063168] px-4 text-center">
         Upcoming events
       </h1>
