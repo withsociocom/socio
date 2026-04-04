@@ -336,8 +336,24 @@ export default function ManageDashboard() {
   const [festArchiveUpdatingIds, setFestArchiveUpdatingIds] = useState<Set<string>>(new Set());
   const [localFestArchivedIds, setLocalFestArchivedIds] = useState<Set<string>>(new Set());
 
+  const normalizeEmail = (value: string | null | undefined) =>
+    String(value || "").trim().toLowerCase();
+  const currentUserEmail = normalizeEmail(userData?.email);
+  const isOwnedByCurrentUser = (...ownerCandidates: Array<string | null | undefined>) => {
+    if (isMasterAdmin) return true;
+    if (!currentUserEmail) return false;
+
+    const normalizedOwners = ownerCandidates
+      .map((owner) => normalizeEmail(owner))
+      .filter(Boolean);
+
+    // Legacy records may not have ownership metadata populated.
+    if (normalizedOwners.length === 0) return true;
+    return normalizedOwners.includes(currentUserEmail);
+  };
+
   const refreshFests = useCallback(async () => {
-    if (!userData?.email || !authToken) {
+    if (!userData?.email) {
       setFests([]);
       setIsLoadingFests(false);
       return;
@@ -346,9 +362,11 @@ export default function ManageDashboard() {
     setIsLoadingFests(true);
     try {
       const response = await fetch(`${API_URL}/api/fests?sortBy=created_at&sortOrder=desc`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
+        headers: authToken
+          ? {
+              Authorization: `Bearer ${authToken}`,
+            }
+          : undefined,
         cache: "no-store",
       });
 
@@ -377,9 +395,9 @@ export default function ManageDashboard() {
         archived_at: fest.archived_at || null,
       }));
 
-      const userSpecificFests = isMasterAdmin
-        ? mappedFests
-        : mappedFests.filter((fest) => !fest.created_by || fest.created_by === userData.email);
+      const userSpecificFests = mappedFests.filter((fest) =>
+        isOwnedByCurrentUser(fest.created_by)
+      );
 
       setFests(userSpecificFests);
     } catch (error) {
@@ -388,7 +406,7 @@ export default function ManageDashboard() {
     } finally {
       setIsLoadingFests(false);
     }
-  }, [API_URL, authToken, isMasterAdmin, userData?.email]);
+  }, [API_URL, authToken, userData?.email, currentUserEmail, isMasterAdmin]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -523,7 +541,11 @@ export default function ManageDashboard() {
   };
 
   const userSpecificContextEvents = (liveEvents.length > 0 ? liveEvents : contextAllEvents as ContextEvent[]).filter((e) => {
-    const isOwnerOrMaster = isMasterAdmin || (userData?.email && e.created_by === userData.email);
+    const isOwnerOrMaster = isOwnedByCurrentUser(
+      e.created_by,
+      (e as any).organizer_email,
+      (e as any).organiser_email
+    );
     const matchesCampus = campusFilter === "all" || (e as any).campus_hosted_at === campusFilter;
     const eventIsPast = isPastDate(e.event_date);
     const archiveState = getEffectiveArchiveState(e);
