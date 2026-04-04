@@ -1416,7 +1416,8 @@ export default function MasterAdminPage() {
                               })}
                             </td>
                             <td className="px-6 py-5 align-top">
-                              <span className="text-sm font-semibold text-gray-900">
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800">
+                                <span className="h-1.5 w-1.5 rounded-full bg-green-600"></span>
                                 {fest.registration_count || 0}
                               </span>
                             </td>
