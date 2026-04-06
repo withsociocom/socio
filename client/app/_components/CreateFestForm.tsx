@@ -1135,7 +1135,10 @@ function CreateFestForm(props?: CreateFestProps) {
         openingDate: formData.openingDate,
         closingDate: formData.closingDate,
         detailedDescription: formData.detailedDescription,
-        departmentAccess: formData.department,
+        departmentAccess:
+          formData.allowedDepartments.length > 0
+            ? formData.allowedDepartments
+            : formData.department,
         category: formData.category,
         contactEmail: formData.contactEmail,
         contactPhone: formData.contactPhone,
@@ -1152,7 +1155,6 @@ function CreateFestForm(props?: CreateFestProps) {
         campus_hosted_at: formData.campusHostedAt || null,
         allowed_campuses: formData.allowedCampuses || [],
         department_hosted_at: formData.departmentHostedAt || null,
-        departmentAccess: formData.allowedDepartments || [],
         allow_outsiders: formData.allowOutsiders,
         // Always include festImageUrl so backend always updates the DB column
         festImageUrl: finalImageUrl,
