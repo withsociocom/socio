@@ -25,6 +25,7 @@ import {
   BarChart2,
   LineChart,
   Settings,
+  Eye,
   ChevronRight,
 } from "lucide-react";
 import AdminDashboardView from "../_components/Admin/AdminDashboardView";
@@ -793,6 +794,19 @@ export default function MasterAdminPage() {
             );
           })}
         </nav>
+
+        {/* Management section */}
+        <div className="mt-1 px-3 pb-4">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-1.5">Management</p>
+          <Link href="/manage">
+            <span className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all font-medium">
+              <span className="text-slate-400">
+                <Eye className="w-4 h-4" />
+              </span>
+              Organiser View
+            </span>
+          </Link>
+        </div>
       </aside>
 
       {/* ── Main Content ──────────────────────────────────────────────────── */}
