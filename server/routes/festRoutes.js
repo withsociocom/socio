@@ -227,7 +227,8 @@ const mapFestResponse = (fest) => {
       timeline: normalizeJsonField(fest.timeline),
       sponsors: normalizeJsonField(fest.sponsors),
       social_links: normalizeJsonField(fest.social_links),
-      faqs: normalizeJsonField(fest.faqs)
+      faqs: normalizeJsonField(fest.faqs),
+      custom_fields: normalizeJsonField(fest.custom_fields)
     };
   } catch (error) {
     console.error("Error mapping fest response:", error.message, fest);
@@ -613,6 +614,10 @@ router.post(
         sponsors: festData.sponsors || [],
         social_links: festData.social_links || [],
         faqs: festData.faqs || [],
+        custom_fields: parseJsonLikeField(
+          pickDefined(festData.custom_fields, festData.customFields),
+          []
+        ),
         campus_hosted_at: festData.campus_hosted_at || festData.campusHostedAt || null,
         allowed_campuses: festData.allowed_campuses || festData.allowedCampuses || [],
         department_hosted_at: festData.department_hosted_at || festData.departmentHostedAt || null,
@@ -679,6 +684,18 @@ router.post(
 
     } catch (error) {
       console.error("Error creating fest:", error);
+
+      const missingCustomFieldsColumn =
+        isMissingColumnError(error) &&
+        String(error?.message || "").toLowerCase().includes("custom_fields");
+
+      if (missingCustomFieldsColumn) {
+        return res.status(500).json({
+          error:
+            "Database migration required: fests.custom_fields is missing. Run server migrations before creating fests with custom fields.",
+        });
+      }
+
       return res.status(500).json({ error: "Internal server error while creating fest." });
     }
   });
@@ -704,6 +721,7 @@ router.put(
 
       const departmentAccessInput = pickDefined(updateData.department_access, updateData.departmentAccess);
       const eventHeadsInput = pickDefined(updateData.event_heads, updateData.eventHeads);
+      const customFieldsInput = pickDefined(updateData.custom_fields, updateData.customFields);
       const campusHostedAtInput = pickDefined(updateData.campus_hosted_at, updateData.campusHostedAt);
       const allowedCampusesInput = pickDefined(updateData.allowed_campuses, updateData.allowedCampuses);
       const departmentHostedAtInput = pickDefined(updateData.department_hosted_at, updateData.departmentHostedAt);
@@ -733,6 +751,7 @@ router.put(
         ["contact_phone", updateData.contact_phone ?? updateData.contactPhone],
         ["department_access", parseJsonLikeField(departmentAccessInput, [])],
         ["event_heads", parseJsonLikeField(eventHeadsInput, [])],
+        ["custom_fields", parseJsonLikeField(customFieldsInput, [])],
         // New enhanced fest fields - parse JSON safely
         ["venue", updateData.venue],
         ["status", updateData.status],
@@ -883,6 +902,18 @@ router.put(
         isOrganiser: req.userInfo?.is_organiser,
         festId: req.params.festId
       });
+
+      const missingCustomFieldsColumn =
+        isMissingColumnError(error) &&
+        String(error?.message || "").toLowerCase().includes("custom_fields");
+
+      if (missingCustomFieldsColumn) {
+        return res.status(500).json({
+          error:
+            "Database migration required: fests.custom_fields is missing. Run server migrations before updating fest custom fields.",
+        });
+      }
+
       return res.status(500).json({ 
         error: "Internal server error while updating fest.",
         details: error.message,

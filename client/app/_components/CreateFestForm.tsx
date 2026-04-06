@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext"; // Adjust path as needed
 import { departments as baseDepartments, christCampuses } from "../lib/eventFormSchema";
 import toast from "react-hot-toast";
 import PublishingOverlay from "./UI/PublishingOverlay";
+import DynamicCustomFieldBuilder, { CustomField } from "./UI/DynamicCustomFieldBuilder";
 const API_URL = process.env.NEXT_PUBLIC_API_URL!.replace(/\/api\/?$/, "");
 const ALLOWED_FEST_IMAGE_TYPES = [
   "image/jpeg",
@@ -34,6 +35,68 @@ const parseYYYYMMDD = (dateString: string): Date | null => {
     return date;
   }
   return null;
+};
+
+const ALLOWED_CUSTOM_FIELD_TYPES: CustomField["type"][] = [
+  "text",
+  "url",
+  "email",
+  "number",
+  "select",
+  "textarea",
+];
+
+const normalizeCustomFields = (value: unknown): CustomField[] => {
+  let parsedValue: unknown = value;
+
+  if (typeof parsedValue === "string") {
+    try {
+      parsedValue = JSON.parse(parsedValue);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(parsedValue)) {
+    return [];
+  }
+
+  return parsedValue
+    .filter(
+      (field): field is Record<string, unknown> =>
+        typeof field === "object" && field !== null
+    )
+    .map((field, index) => {
+      const type =
+        typeof field.type === "string" &&
+        ALLOWED_CUSTOM_FIELD_TYPES.includes(field.type as CustomField["type"])
+          ? (field.type as CustomField["type"])
+          : "text";
+
+      const options =
+        type === "select" && Array.isArray(field.options)
+          ? field.options
+              .filter((option): option is string => typeof option === "string")
+              .map((option) => option.trim())
+              .filter(Boolean)
+          : undefined;
+
+      return {
+        id:
+          typeof field.id === "string" && field.id.trim()
+            ? field.id
+            : `fest-custom-field-${index + 1}`,
+        label: typeof field.label === "string" ? field.label.trim() : "",
+        type,
+        required: field.required === true,
+        placeholder:
+          typeof field.placeholder === "string" && field.placeholder.trim()
+            ? field.placeholder.trim()
+            : undefined,
+        options,
+      } as CustomField;
+    })
+    .filter((field) => field.label.length > 0);
 };
 
 interface CustomDateInputProps {
@@ -323,6 +386,7 @@ interface CreateFestState {
   sponsors: { name: string; logo_url: string; website?: string }[];
   social_links: { platform: string; url: string }[];
   faqs: { question: string; answer: string }[];
+  customFields: CustomField[];
   campusHostedAt: string;
   allowedCampuses: string[];
   departmentHostedAt: string;
@@ -599,6 +663,7 @@ interface CreateFestProps {
   sponsors?: { name: string; logo_url: string; website?: string }[];
   social_links?: { platform: string; url: string }[];
   faqs?: { question: string; answer: string }[];
+  customFields?: CustomField[];
 }
 
 const FullPageSpinner: React.FC<{ text: string }> = ({ text }) => (
@@ -654,6 +719,7 @@ function CreateFestForm(props?: CreateFestProps) {
   const sponsors = props?.sponsors || [];
   const social_links = props?.social_links || [];
   const faqs = props?.faqs || [];
+  const customFields = normalizeCustomFields(props?.customFields || []);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -675,6 +741,7 @@ function CreateFestForm(props?: CreateFestProps) {
     sponsors,
     social_links,
     faqs,
+    customFields,
     campusHostedAt: "",
     allowedCampuses: [],
     departmentHostedAt: "",
@@ -758,6 +825,7 @@ function CreateFestForm(props?: CreateFestProps) {
               sponsors: data.fest.sponsors || [],
               social_links: data.fest.social_links || [],
               faqs: data.fest.faqs || [],
+              customFields: normalizeCustomFields(data.fest.custom_fields),
               campusHostedAt: data.fest.campus_hosted_at || "",
               allowedCampuses: data.fest.allowed_campuses || [],
               departmentHostedAt: data.fest.department_hosted_at || "",
@@ -1193,6 +1261,7 @@ function CreateFestForm(props?: CreateFestProps) {
         sponsors: formData.sponsors,
         social_links: formData.social_links,
         faqs: formData.faqs,
+        custom_fields: formData.customFields,
         campus_hosted_at: formData.campusHostedAt || null,
         allowed_campuses: formData.allowedCampuses || [],
         department_hosted_at: formData.departmentHostedAt || null,
@@ -2026,13 +2095,14 @@ function CreateFestForm(props?: CreateFestProps) {
                   </div>
                 </div>
 
-                {/* Custom Fields Section - After Contact Phone */}
-                <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-6 sm:p-7 shadow-sm">
-                  <div className="p-4 bg-white rounded-lg border border-indigo-100 text-sm text-gray-600">
-                    <p className="font-medium text-gray-700 mb-1">Custom Fields Coming Soon</p>
-                    <p className="text-xs">You'll be able to add specific registration fields for your fest participants.</p>
-                  </div>
-                </div>
+                {/* Custom Fields Section */}
+                <DynamicCustomFieldBuilder
+                  fields={formData.customFields}
+                  onChange={(updatedFields) =>
+                    setFormData((prev) => ({ ...prev, customFields: updatedFields }))
+                  }
+                  maxFields={10}
+                />
 
                 <div>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6">
