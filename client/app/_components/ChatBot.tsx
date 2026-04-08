@@ -413,6 +413,7 @@ const HELP_MESSAGE = [
 const FLOW_CONTINUE_LABEL = "Continue";
 const FLOW_RECAP_LABEL = "Quick recap";
 const FLOW_SKIP_LABEL = "Show other prompts";
+const LOCAL_STREAM_STEP_DELAY_MS = 12;
 
 function splitIntoProgressiveChunks(answer: string): string[] {
   const normalized = answer.replace(/\s+/g, " ").trim();
@@ -482,6 +483,86 @@ function isSkipFlowIntent(input: string): boolean {
   const normalized = normalizePromptForMatch(input);
   return normalized === normalizePromptForMatch(FLOW_SKIP_LABEL)
     || /show (other|more) prompts|skip/i.test(normalized);
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function renderInlineFormattedText(text: string): React.ReactNode[] {
+  const segments = text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
+    .filter((segment) => segment.length > 0);
+
+  return segments.map((segment, index) => {
+    if (segment.startsWith("**") && segment.endsWith("**") && segment.length > 4) {
+      return (
+        <strong key={`strong-${index}`} className="font-semibold text-white">
+          {segment.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    if (segment.startsWith("`") && segment.endsWith("`") && segment.length > 2) {
+      return (
+        <code
+          key={`code-${index}`}
+          className="rounded-md border border-cyan-200/35 bg-[#0a214f] px-1.5 py-0.5 text-[12px] text-cyan-100"
+        >
+          {segment.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return <span key={`txt-${index}`}>{segment}</span>;
+  });
+}
+
+function renderAssistantContent(content: string): React.ReactNode {
+  const blocks = content
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const normalizedBlocks = blocks.length > 0 ? blocks : [content.trim()];
+
+  return normalizedBlocks.map((block, blockIndex) => {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const isBulletList = lines.length > 0 && lines.every((line) => /^[-*]\s+/.test(line));
+    const isOrderedList = lines.length > 0 && lines.every((line) => /^\d+\.\s+/.test(line));
+
+    if (isBulletList) {
+      return (
+        <ul key={`ul-${blockIndex}`} className="ml-4 list-disc space-y-1 text-blue-50/95">
+          {lines.map((line, lineIndex) => (
+            <li key={`ul-${blockIndex}-${lineIndex}`}>{renderInlineFormattedText(line.replace(/^[-*]\s+/, ""))}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (isOrderedList) {
+      return (
+        <ol key={`ol-${blockIndex}`} className="ml-4 list-decimal space-y-1 text-blue-50/95">
+          {lines.map((line, lineIndex) => (
+            <li key={`ol-${blockIndex}-${lineIndex}`}>{renderInlineFormattedText(line.replace(/^\d+\.\s+/, ""))}</li>
+          ))}
+        </ol>
+      );
+    }
+
+    return (
+      <p key={`p-${blockIndex}`} className="text-blue-50/95">
+        {renderInlineFormattedText(block)}
+      </p>
+    );
+  });
 }
 
 function getUserFacingErrorMessage(error: unknown): string {
@@ -577,6 +658,7 @@ export default function ChatBot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const localStreamVersionRef = useRef(0);
   const [isThinking, setIsThinking] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [showFabPulse, setShowFabPulse] = useState(true);
@@ -627,11 +709,62 @@ export default function ChatBot() {
       streamAbortRef.current.abort();
       streamAbortRef.current = null;
     }
+
+    localStreamVersionRef.current += 1;
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setActiveFlow(null);
     setInput("");
     setIsThinking(false);
     setIsStreaming(false);
+  }, []);
+
+  const appendAssistantMessage = useCallback(async (content: string, streamLocally = true) => {
+    const message = content.trim();
+    if (!message) return;
+
+    if (!streamLocally || message.length < 36) {
+      setMessages((prev) => [...prev, { role: "assistant", content: message }]);
+      return;
+    }
+
+    const streamVersion = ++localStreamVersionRef.current;
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setIsStreaming(true);
+
+    const totalLength = message.length;
+    const chunkSize = Math.max(4, Math.ceil(totalLength / 44));
+
+    try {
+      for (let cursor = chunkSize; cursor <= totalLength + chunkSize; cursor += chunkSize) {
+        if (localStreamVersionRef.current !== streamVersion) {
+          return;
+        }
+
+        const partial = message.slice(0, Math.min(cursor, totalLength));
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const next = [...prev];
+          const lastIndex = next.length - 1;
+
+          if (next[lastIndex].role === "assistant") {
+            next[lastIndex] = {
+              ...next[lastIndex],
+              content: partial,
+            };
+          }
+
+          return next;
+        });
+
+        if (cursor < totalLength) {
+          await wait(LOCAL_STREAM_STEP_DELAY_MS);
+        }
+      }
+    } finally {
+      if (localStreamVersionRef.current === streamVersion) {
+        setIsStreaming(false);
+      }
+    }
   }, []);
 
   const fetchWebSummary = useCallback(async (url: string, query: string) => {
@@ -899,6 +1032,7 @@ export default function ChatBot() {
         streamAbortRef.current.abort();
         streamAbortRef.current = null;
       }
+      localStreamVersionRef.current += 1;
     };
   }, []);
 
@@ -929,6 +1063,8 @@ export default function ChatBot() {
     const trimmed = text.trim();
     if (!trimmed || isThinking) return;
 
+    localStreamVersionRef.current += 1;
+
     if (streamAbortRef.current) {
       streamAbortRef.current.abort();
       streamAbortRef.current = null;
@@ -946,10 +1082,7 @@ export default function ChatBot() {
     try {
       if (activeFlow && isSkipFlowIntent(trimmed)) {
         setActiveFlow(null);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "Sure, let's switch topics. Pick a prompt below or ask me anything." },
-        ]);
+        await appendAssistantMessage("Sure, let's switch topics. Pick a prompt below or ask me anything.");
         return;
       }
 
@@ -964,7 +1097,7 @@ export default function ChatBot() {
             : "\nYou've reached the final step. Want to explore a related prompt?",
         ].join("\n\n");
 
-        setMessages((prev) => [...prev, { role: "assistant", content: recapMessage }]);
+        await appendAssistantMessage(recapMessage);
         return;
       }
 
@@ -972,10 +1105,7 @@ export default function ChatBot() {
         const chunkIndex = activeFlow.nextChunkIndex;
         if (chunkIndex >= activeFlow.chunks.length) {
           setActiveFlow(null);
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: "We've reached the end of that answer. Pick a related prompt and I'll continue." },
-          ]);
+          await appendAssistantMessage("We've reached the end of that answer. Pick a related prompt and I'll continue.");
           return;
         }
 
@@ -1000,7 +1130,7 @@ export default function ChatBot() {
           );
         }
 
-        setMessages((prev) => [...prev, { role: "assistant", content: chunkMessage }]);
+        await appendAssistantMessage(chunkMessage);
         return;
       }
 
@@ -1009,10 +1139,7 @@ export default function ChatBot() {
         const chunks = splitIntoProgressiveChunks(inbuiltEntry.answer);
         if (chunks.length === 0) {
           setActiveFlow(null);
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: UNKNOWN_ANSWER_MESSAGE },
-          ]);
+          await appendAssistantMessage(UNKNOWN_ANSWER_MESSAGE, false);
           return;
         }
 
@@ -1034,7 +1161,7 @@ export default function ChatBot() {
           setActiveFlow(null);
         }
 
-        setMessages((prev) => [...prev, { role: "assistant", content: firstChunkMessage }]);
+        await appendAssistantMessage(firstChunkMessage);
         return;
       }
 
@@ -1044,7 +1171,7 @@ export default function ChatBot() {
 
       const localReply = await generateLocalReply(trimmed);
       if (localReply) {
-        setMessages((prev) => [...prev, { role: "assistant", content: localReply }]);
+        await appendAssistantMessage(localReply);
         return;
       }
 
@@ -1068,11 +1195,11 @@ export default function ChatBot() {
         }
 
         const fallbackReply = await requestChatReply(trimmed, history);
-        setMessages((prev) => [...prev, { role: "assistant", content: fallbackReply }]);
+        await appendAssistantMessage(fallbackReply);
       }
     } catch (error) {
       const message = getUserFacingErrorMessage(error);
-      setMessages((prev) => [...prev, { role: "assistant", content: message }]);
+      await appendAssistantMessage(message, false);
     } finally {
       setIsThinking(false);
       setIsStreaming(false);
@@ -1134,12 +1261,15 @@ export default function ChatBot() {
             <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 space-y-3">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[86%] px-4 py-3 rounded-2xl text-[13px] sm:text-sm leading-6 whitespace-pre-wrap break-words overflow-hidden backdrop-blur-sm shadow-sm ${
+                  <div className={`max-w-[86%] px-4 py-3 rounded-2xl text-[13px] sm:text-sm leading-6 break-words overflow-hidden backdrop-blur-sm shadow-sm ${
                     msg.role === "user"
                       ? "bg-gradient-to-br from-[#2d7bf8] via-[#1f63de] to-[#154CB3] border border-blue-200/35 text-white rounded-br-md shadow-[0_10px_24px_-12px_rgba(31,99,222,0.95)]"
-                      : "bg-white/10 border border-white/15 text-blue-50 rounded-bl-md"
+                      : "bg-white/10 border border-white/15 text-blue-50 rounded-bl-md space-y-2"
                   }`}>
-                    {msg.content}
+                    {msg.role === "assistant" ? renderAssistantContent(msg.content) : msg.content}
+                    {isTyping && msg.role === "assistant" && i === messages.length - 1 && (
+                      <span className="ml-1 inline-block h-4 w-[2px] animate-pulse rounded bg-cyan-200 align-middle" />
+                    )}
                   </div>
                 </div>
               ))}
