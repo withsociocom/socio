@@ -997,9 +997,13 @@ export default function EventForm({
       setValue("maxParticipants", "1", { shouldValidate: false });
       setValue("minParticipants", "1", { shouldValidate: false });
     } else {
-      // Auto-fill to 2 when team event is enabled
-      setValue("maxParticipants", watch("maxParticipants") || "2", { shouldValidate: false });
-      setValue("minParticipants", watch("minParticipants") || "2", { shouldValidate: false });
+      // Auto-fill to 1 when team event is enabled, if not already set
+      if (!watch("minParticipants")) {
+        setValue("minParticipants", "1", { shouldValidate: false });
+      }
+      if (!watch("maxParticipants")) {
+        setValue("maxParticipants", "1", { shouldValidate: false });
+      }
     }
   }, [watchedIsTeamEvent, setValue, watch]);
 
@@ -1625,7 +1629,7 @@ export default function EventForm({
                                   {...field}
                                   type="text"
                                   inputMode="numeric"
-                                  placeholder="e.g., 2"
+                                  placeholder="e.g., 1"
                                   className={`w-full px-3 py-2 text-sm rounded-lg border transition-all ${
                                     fieldState.error
                                       ? "border-red-500 focus:ring-red-500"
@@ -1640,7 +1644,7 @@ export default function EventForm({
                                   if (!minRaw) return "Min is required";
                                   if (!/^\d+$/.test(minRaw)) return "Enter a number";
                                   const minValue = Number(minRaw);
-                                  if (minValue < 2) return "Min 2 for teams";
+                                  if (minValue < 1) return "Min must be 1 or more";
                                   const maxRaw = String(watchedMaxParticipants || "").trim();
                                   if (maxRaw && /^\d+$/.test(maxRaw) && minValue > Number(maxRaw)) {
                                     return "Min ≤ Max";
@@ -1682,7 +1686,7 @@ export default function EventForm({
                                   if (!maxRaw) return "Max is required";
                                   if (!/^\d+$/.test(maxRaw)) return "Enter a number";
                                   const maxValue = Number(maxRaw);
-                                  if (maxValue < 2) return "Max 2 for teams";
+                                  if (maxValue < 1) return "Max must be 1 or more";
                                   const minRaw = String(watchedMinParticipants || "").trim();
                                   if (minRaw && /^\d+$/.test(minRaw) && maxValue < Number(minRaw)) {
                                     return "Max ≥ Min";
