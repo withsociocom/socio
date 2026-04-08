@@ -15,6 +15,117 @@ const ALLOWED_FEST_IMAGE_TYPES = [
   "image/gif",
 ];
 
+const FEST_TEAM_SETTINGS_KEY = "__team_event_settings__";
+
+interface FestTeamSettings {
+  isTeamEvent: boolean;
+  minParticipants: string;
+  maxParticipants: string;
+}
+
+const parseFestCustomFields = (value: unknown): any[] => {
+  if (Array.isArray(value)) return value;
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const extractTeamSettingsFromCustomFields = (
+  customFields: unknown
+): FestTeamSettings | null => {
+  const parsedFields = parseFestCustomFields(customFields);
+  const settingsEntry = parsedFields.find(
+    (field) =>
+      field &&
+      typeof field === "object" &&
+      !Array.isArray(field) &&
+      field.key === FEST_TEAM_SETTINGS_KEY
+  );
+
+  if (!settingsEntry || typeof settingsEntry !== "object" || Array.isArray(settingsEntry)) {
+    return null;
+  }
+
+  const rawValue = (settingsEntry as { value?: unknown }).value;
+  if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
+    return null;
+  }
+
+  const value = rawValue as {
+    isTeamEvent?: unknown;
+    minParticipants?: unknown;
+    maxParticipants?: unknown;
+  };
+
+  const isTeamEvent =
+    value.isTeamEvent === true || value.isTeamEvent === "true";
+
+  const toClampedValue = (input: unknown, fallback: number) => {
+    const parsed = Number(input);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(1, Math.floor(parsed));
+  };
+
+  const rawMin = toClampedValue(value.minParticipants, isTeamEvent ? 2 : 1);
+  const rawMax = toClampedValue(value.maxParticipants, isTeamEvent ? 2 : 1);
+
+  if (!isTeamEvent) {
+    return {
+      isTeamEvent: false,
+      minParticipants: "1",
+      maxParticipants: "1",
+    };
+  }
+
+  const normalizedMax = Math.max(2, rawMax);
+  const normalizedMin = Math.min(Math.max(2, rawMin), normalizedMax);
+
+  return {
+    isTeamEvent: true,
+    minParticipants: String(normalizedMin),
+    maxParticipants: String(normalizedMax),
+  };
+};
+
+const upsertTeamSettingsInCustomFields = (
+  customFields: unknown,
+  teamSettings: FestTeamSettings
+): any[] => {
+  const parsedFields = parseFestCustomFields(customFields).filter(
+    (field) =>
+      !(
+        field &&
+        typeof field === "object" &&
+        !Array.isArray(field) &&
+        field.key === FEST_TEAM_SETTINGS_KEY
+      )
+  );
+
+  if (!teamSettings.isTeamEvent) {
+    return parsedFields;
+  }
+
+  return [
+    ...parsedFields,
+    {
+      key: FEST_TEAM_SETTINGS_KEY,
+      value: {
+        isTeamEvent: true,
+        minParticipants: teamSettings.minParticipants,
+        maxParticipants: teamSettings.maxParticipants,
+      },
+    },
+  ];
+};
+
 const formatDateToYYYYMMDD = (date: Date): string => {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -309,6 +420,9 @@ interface CreateFestState {
   title: string;
   openingDate: string;
   closingDate: string;
+  isTeamEvent: boolean;
+  minParticipants: string;
+  maxParticipants: string;
   detailedDescription: string;
   department: string[];
   category: string;
@@ -328,6 +442,7 @@ interface CreateFestState {
   departmentHostedAt: string;
   allowedDepartments: string[];
   allowOutsiders: boolean;
+  customFields: any[];
 }
 
 function DepartmentAndCategoryInputs({
@@ -581,6 +696,9 @@ interface CreateFestProps {
   title?: string;
   openingDate?: string;
   closingDate?: string;
+  isTeamEvent?: boolean;
+  minParticipants?: string;
+  maxParticipants?: string;
   detailedDescription?: string;
   department?: string[];
   category?: string;
@@ -602,6 +720,7 @@ interface CreateFestProps {
   sponsors?: { name: string; logo_url: string; website?: string }[];
   social_links?: { platform: string; url: string }[];
   faqs?: { question: string; answer: string }[];
+  customFields?: any[];
 }
 
 const FullPageSpinner: React.FC<{ text: string }> = ({ text }) => (
@@ -637,6 +756,9 @@ function CreateFestForm(props?: CreateFestProps) {
   const title = props?.title || "";
   const openingDate = props?.openingDate || "";
   const closingDate = props?.closingDate || "";
+  const isTeamEvent = props?.isTeamEvent || false;
+  const minParticipants = props?.minParticipants || (isTeamEvent ? "2" : "1");
+  const maxParticipants = props?.maxParticipants || (isTeamEvent ? "2" : "1");
   const detailedDescription = props?.detailedDescription || "";
   const department: string[] = props?.department || [];
   const category = props?.category || "";
@@ -644,6 +766,7 @@ function CreateFestForm(props?: CreateFestProps) {
   const contactPhone = props?.contactPhone || "";
   const organizingDept = props?.organizingDept || "";
   const initialEventHeads: { email: string; expiresAt: string | null }[] = props?.eventHeads || [];
+  const customFields = parseFestCustomFields(props?.customFields);
   // New props for edit mode
   const isEditMode = props?.isEditMode || false;
   const existingImageFileUrl = props?.existingImageFileUrl || null;
@@ -664,6 +787,9 @@ function CreateFestForm(props?: CreateFestProps) {
     title,
     openingDate,
     closingDate,
+    isTeamEvent,
+    minParticipants,
+    maxParticipants,
     detailedDescription,
     department,
     category,
@@ -683,6 +809,7 @@ function CreateFestForm(props?: CreateFestProps) {
     departmentHostedAt: "",
     allowedDepartments: [],
     allowOutsiders: false,
+    customFields,
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false); // Used for delete operation
@@ -736,6 +863,39 @@ function CreateFestForm(props?: CreateFestProps) {
               }
               return { email: head.email || '', expiresAt: head.expiresAt || null };
             });
+
+            const parsedCustomFields = parseFestCustomFields(data.fest.custom_fields);
+            const customTeamSettings = extractTeamSettingsFromCustomFields(parsedCustomFields);
+
+            const directMaxParticipants = Number(
+              data.fest.participants_per_team ?? data.fest.max_participants ?? 1
+            );
+            const directTeamEnabled =
+              Number.isFinite(directMaxParticipants) && directMaxParticipants > 1;
+            const normalizedDirectMax = directTeamEnabled
+              ? Math.max(2, Math.floor(directMaxParticipants))
+              : 1;
+
+            const directMinParticipants = Number(
+              data.fest.min_participants ?? (directTeamEnabled ? 2 : 1)
+            );
+            const normalizedDirectMin = directTeamEnabled
+              ? Math.min(
+                  Math.max(
+                    Number.isFinite(directMinParticipants)
+                      ? Math.floor(directMinParticipants)
+                      : 2,
+                    2
+                  ),
+                  normalizedDirectMax
+                )
+              : 1;
+
+            const resolvedIsTeamEvent = customTeamSettings?.isTeamEvent ?? directTeamEnabled;
+            const resolvedMaxParticipants = customTeamSettings?.maxParticipants
+              ?? String(resolvedIsTeamEvent ? normalizedDirectMax : 1);
+            const resolvedMinParticipants = customTeamSettings?.minParticipants
+              ?? String(resolvedIsTeamEvent ? normalizedDirectMin : 1);
             
             setFormData({
               title: data.fest.fest_title || "",
@@ -745,6 +905,9 @@ function CreateFestForm(props?: CreateFestProps) {
               closingDate: data.fest.closing_date
                 ? formatDateToYYYYMMDD(new Date(data.fest.closing_date))
                 : "",
+              isTeamEvent: resolvedIsTeamEvent,
+              minParticipants: resolvedMinParticipants,
+              maxParticipants: resolvedMaxParticipants,
               detailedDescription: data.fest.description || "",
               department: data.fest.department_access || [],
               category: data.fest.category || "",
@@ -766,6 +929,7 @@ function CreateFestForm(props?: CreateFestProps) {
               departmentHostedAt: data.fest.department_hosted_at || "",
               allowedDepartments: data.fest.department_access || [],
               allowOutsiders: data.fest.allow_outsiders === true || data.fest.allow_outsiders === 'true' || false,
+              customFields: parsedCustomFields,
             });
           } else {
             throw new Error("Fest data not found in response.");
@@ -903,6 +1067,68 @@ function CreateFestForm(props?: CreateFestProps) {
               delete newErrors.closingDate;
             }
             break;
+          case "minParticipants": {
+            if (!formData.isTeamEvent) {
+              delete newErrors.minParticipants;
+              break;
+            }
+
+            const minRaw = String(value || "").trim();
+            if (!minRaw) {
+              newErrors.minParticipants = "Min is required";
+              break;
+            }
+            if (!/^\d+$/.test(minRaw)) {
+              newErrors.minParticipants = "Enter a number";
+              break;
+            }
+
+            const minValue = Number(minRaw);
+            if (minValue < 2) {
+              newErrors.minParticipants = "Min 2 for teams";
+              break;
+            }
+
+            const maxRaw = String(formData.maxParticipants || "").trim();
+            if (maxRaw && /^\d+$/.test(maxRaw) && minValue > Number(maxRaw)) {
+              newErrors.minParticipants = "Min ≤ Max";
+              break;
+            }
+
+            delete newErrors.minParticipants;
+            break;
+          }
+          case "maxParticipants": {
+            if (!formData.isTeamEvent) {
+              delete newErrors.maxParticipants;
+              break;
+            }
+
+            const maxRaw = String(value || "").trim();
+            if (!maxRaw) {
+              newErrors.maxParticipants = "Max is required";
+              break;
+            }
+            if (!/^\d+$/.test(maxRaw)) {
+              newErrors.maxParticipants = "Enter a number";
+              break;
+            }
+
+            const maxValue = Number(maxRaw);
+            if (maxValue < 2) {
+              newErrors.maxParticipants = "Max 2 for teams";
+              break;
+            }
+
+            const minRaw = String(formData.minParticipants || "").trim();
+            if (minRaw && /^\d+$/.test(minRaw) && maxValue < Number(minRaw)) {
+              newErrors.maxParticipants = "Max ≥ Min";
+              break;
+            }
+
+            delete newErrors.maxParticipants;
+            break;
+          }
           case "detailedDescription":
             if (!(value as string).trim())
               newErrors.detailedDescription = "Description is required";
@@ -955,7 +1181,15 @@ function CreateFestForm(props?: CreateFestProps) {
       }
       setErrors(newErrors);
     },
-    [errors, formData.openingDate, formData.closingDate, isEditMode] // Use prop isEditMode here
+    [
+      errors,
+      formData.openingDate,
+      formData.closingDate,
+      formData.isTeamEvent,
+      formData.minParticipants,
+      formData.maxParticipants,
+      isEditMode,
+    ] // Use prop isEditMode here
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -967,6 +1201,8 @@ function CreateFestForm(props?: CreateFestProps) {
       "title",
       "openingDate",
       "closingDate",
+      "minParticipants",
+      "maxParticipants",
       "detailedDescription",
       "department",
       "category",
@@ -1023,6 +1259,50 @@ function CreateFestForm(props?: CreateFestProps) {
                 "Closing date must be on/after opening date";
           }
           break;
+        case "minParticipants": {
+          if (!formData.isTeamEvent) break;
+          const minRaw = String(value || "").trim();
+          if (!minRaw) {
+            errorMsg = "Min is required";
+            break;
+          }
+          if (!/^\d+$/.test(minRaw)) {
+            errorMsg = "Enter a number";
+            break;
+          }
+          const minValue = Number(minRaw);
+          if (minValue < 2) {
+            errorMsg = "Min 2 for teams";
+            break;
+          }
+          const maxRaw = String(formData.maxParticipants || "").trim();
+          if (maxRaw && /^\d+$/.test(maxRaw) && minValue > Number(maxRaw)) {
+            errorMsg = "Min ≤ Max";
+          }
+          break;
+        }
+        case "maxParticipants": {
+          if (!formData.isTeamEvent) break;
+          const maxRaw = String(value || "").trim();
+          if (!maxRaw) {
+            errorMsg = "Max is required";
+            break;
+          }
+          if (!/^\d+$/.test(maxRaw)) {
+            errorMsg = "Enter a number";
+            break;
+          }
+          const maxValue = Number(maxRaw);
+          if (maxValue < 2) {
+            errorMsg = "Max 2 for teams";
+            break;
+          }
+          const minRaw = String(formData.minParticipants || "").trim();
+          if (minRaw && /^\d+$/.test(minRaw) && maxValue < Number(minRaw)) {
+            errorMsg = "Max ≥ Min";
+          }
+          break;
+        }
         case "detailedDescription":
           if (!String(value).trim()) errorMsg = "Description is required";
           else if (String(value).length > 1000)
@@ -1147,6 +1427,25 @@ function CreateFestForm(props?: CreateFestProps) {
     try {
       if (!session) throw new Error("You must be logged in.");
 
+      const normalizedTeamMin = formData.isTeamEvent
+        ? Math.max(2, Number(formData.minParticipants || "2"))
+        : 1;
+      const normalizedTeamMax = formData.isTeamEvent
+        ? Math.max(
+            normalizedTeamMin,
+            Math.max(2, Number(formData.maxParticipants || "2"))
+          )
+        : 1;
+
+      const customFieldsWithTeamSettings = upsertTeamSettingsInCustomFields(
+        formData.customFields,
+        {
+          isTeamEvent: formData.isTeamEvent,
+          minParticipants: String(normalizedTeamMin),
+          maxParticipants: String(normalizedTeamMax),
+        }
+      );
+
       // Determine the final image URL:
       // - If a new file was uploaded, use the new URL
       // - If in edit mode with no new file, keep the existing URL
@@ -1159,6 +1458,8 @@ function CreateFestForm(props?: CreateFestProps) {
         festTitle: formData.title,
         openingDate: formData.openingDate,
         closingDate: formData.closingDate,
+        participants_per_team: normalizedTeamMax,
+        min_participants: normalizedTeamMin,
         detailedDescription: formData.detailedDescription,
         departmentAccess:
           formData.allowedDepartments.length > 0
@@ -1181,6 +1482,7 @@ function CreateFestForm(props?: CreateFestProps) {
         allowed_campuses: formData.allowedCampuses || [],
         department_hosted_at: formData.departmentHostedAt || null,
         allow_outsiders: formData.allowOutsiders,
+        custom_fields: customFieldsWithTeamSettings,
         // Always include festImageUrl so backend always updates the DB column
         festImageUrl: finalImageUrl,
       };
@@ -1284,6 +1586,52 @@ function CreateFestForm(props?: CreateFestProps) {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
+
+  const handleTeamEventToggle = (enabled: boolean) => {
+    setFormData((prev) => {
+      if (!enabled) {
+        return {
+          ...prev,
+          isTeamEvent: false,
+          minParticipants: "1",
+          maxParticipants: "1",
+        };
+      }
+
+      const nextMin = Math.max(2, Number(prev.minParticipants || "2"));
+      const nextMax = Math.max(nextMin, Math.max(2, Number(prev.maxParticipants || "2")));
+
+      return {
+        ...prev,
+        isTeamEvent: true,
+        minParticipants: String(nextMin),
+        maxParticipants: String(nextMax),
+      };
+    });
+
+    if (!enabled) {
+      setErrors((prev) => {
+        const nextErrors = { ...prev };
+        delete nextErrors.minParticipants;
+        delete nextErrors.maxParticipants;
+        return nextErrors;
+      });
+    }
+  };
+
+  const handleTeamParticipantChange = (
+    field: "minParticipants" | "maxParticipants",
+    value: string
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleTeamParticipantBlur = (
+    field: "minParticipants" | "maxParticipants"
+  ) => {
+    validateField(field, formData[field]);
+  };
+
   const handleInputBlur = (
     e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => validateField(e.target.id, e.target.value);
@@ -1560,6 +1908,96 @@ function CreateFestForm(props?: CreateFestProps) {
                     />
                   </div>
                 </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 sm:py-3.5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-3">
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <label
+                        htmlFor="isTeamEvent"
+                        className="text-sm font-medium text-gray-700 whitespace-nowrap"
+                      >
+                        Team event
+                      </label>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          id="isTeamEvent"
+                          checked={formData.isTeamEvent}
+                          onChange={(event) =>
+                            handleTeamEventToggle(event.target.checked)
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#154CB3] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#154CB3]"></div>
+                      </label>
+                    </div>
+
+                    {formData.isTeamEvent && (
+                      <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <div className="flex-1 sm:flex-none">
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                            Min
+                          </label>
+                          <input
+                            id="minParticipants"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="e.g., 2"
+                            value={formData.minParticipants}
+                            onChange={(event) =>
+                              handleTeamParticipantChange(
+                                "minParticipants",
+                                event.target.value
+                              )
+                            }
+                            onBlur={() => handleTeamParticipantBlur("minParticipants")}
+                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-all ${
+                              errors.minParticipants
+                                ? "border-red-500 focus:ring-red-500"
+                                : "border-gray-300 focus:ring-[#154CB3]"
+                            } focus:outline-none focus:ring-1 focus:border-transparent`}
+                          />
+                          {errors.minParticipants && (
+                            <p className="text-red-500 text-xs mt-1">
+                              {errors.minParticipants}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex-1 sm:flex-none">
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                            Max
+                          </label>
+                          <input
+                            id="maxParticipants"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="e.g., 5"
+                            value={formData.maxParticipants}
+                            onChange={(event) =>
+                              handleTeamParticipantChange(
+                                "maxParticipants",
+                                event.target.value
+                              )
+                            }
+                            onBlur={() => handleTeamParticipantBlur("maxParticipants")}
+                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-all ${
+                              errors.maxParticipants
+                                ? "border-red-500 focus:ring-red-500"
+                                : "border-gray-300 focus:ring-[#154CB3]"
+                            } focus:outline-none focus:ring-1 focus:border-transparent`}
+                          />
+                          {errors.maxParticipants && (
+                            <p className="text-red-500 text-xs mt-1">
+                              {errors.maxParticipants}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label
                     htmlFor="detailedDescription"
