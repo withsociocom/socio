@@ -13,6 +13,7 @@ interface WebFetchResponse {
   title: string;
   description?: string;
   summary: string;
+  highlights?: string[];
   error?: string;
 }
 interface ChatUsage {
@@ -37,6 +38,11 @@ interface ProgressiveFlowState {
   chunks: string[];
   nextChunkIndex: number;
   followUps: string[];
+}
+
+interface TypoCorrectionResult {
+  correctedInput: string;
+  replacements: Array<{ from: string; to: string }>;
 }
 
 /* ─── Suggested Prompt Sets ─────────────────────────── */
@@ -363,7 +369,7 @@ function normalizePromptForMatch(input: string): string {
 }
 
 const WELCOME_MESSAGE = "Hi! I'm SocioAssist - your campus event guide. Ask me anything and I'll help in real time.";
-const UNKNOWN_ANSWER_MESSAGE = "I can't assist you with that. Please rephrase your question or ask something else.";
+const UNKNOWN_ANSWER_MESSAGE = "I am here to help. Please share your question in one short line and I will answer right away.";
 const CHAT_API_ENDPOINT = "/api/chat";
 
 function toNonNegativeInteger(value: unknown): number | null {
@@ -410,6 +416,95 @@ const HELP_MESSAGE = [
   "- Paste any URL to fetch and summarize webpage content.",
   "- Use navigation commands like: open events, go to profile, open fests.",
 ].join("\n");
+
+const SMALL_TALK_TOKENS = new Set([
+  "hi",
+  "hii",
+  "hiii",
+  "hey",
+  "heyy",
+  "hello",
+  "yo",
+  "sup",
+  "hola",
+  "namaste",
+  "ok",
+  "okay",
+  "thanks",
+  "thankyou",
+  "thx",
+]);
+
+const KNOWN_SHORT_INTENT_TOKENS = new Set([
+  "about",
+  "auth",
+  "cookie",
+  "cookies",
+  "contact",
+  "discover",
+  "dashboard",
+  "home",
+  "event",
+  "events",
+  "faq",
+  "fest",
+  "fests",
+  "founder",
+  "founders",
+  "help",
+  "manage",
+  "mission",
+  "pricing",
+  "privacy",
+  "profile",
+  "register",
+  "registration",
+  "socio",
+  "story",
+  "support",
+  "team",
+  "terms",
+]);
+
+const BASE_TYPO_DICTIONARY_WORDS = [
+  "about",
+  "auth",
+  "hello",
+  "hey",
+  "hi",
+  "contact",
+  "cookies",
+  "dashboard",
+  "discover",
+  "event",
+  "events",
+  "faq",
+  "fest",
+  "fests",
+  "founder",
+  "founders",
+  "go",
+  "help",
+  "home",
+  "login",
+  "manage",
+  "masteradmin",
+  "mission",
+  "open",
+  "pricing",
+  "privacy",
+  "profile",
+  "register",
+  "registration",
+  "show",
+  "signin",
+  "socio",
+  "story",
+  "support",
+  "team",
+  "terms",
+  "visit",
+];
 
 const FLOW_CONTINUE_LABEL = "Continue";
 const FLOW_RECAP_LABEL = "Quick recap";
@@ -463,7 +558,7 @@ function formatProgressiveChunkMessage(
   const outro =
     chunkIndex < totalChunks - 1
       ? `\n\nWould you like the next step? Tap "${FLOW_CONTINUE_LABEL}".`
-      : "\n\nThat covers it. Want a related topic next?";
+      : "";
 
   return `${intro}\n\n${chunk}${outro}`;
 }
@@ -490,6 +585,275 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function normalizeLooseInput(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelyNonsenseToken(token: string): boolean {
+  if (!token) return false;
+  if (SMALL_TALK_TOKENS.has(token)) return false;
+  if (KNOWN_SHORT_INTENT_TOKENS.has(token)) return false;
+  if (/^\d+$/.test(token)) return true;
+  if (/^(.)\1{2,}$/.test(token)) return true;
+  if (token.length <= 2) return true;
+  if (!/[aeiou]/.test(token) && token.length >= 3) return true;
+  return false;
+}
+
+function getMaxTypoDistance(tokenLength: number): number {
+  if (tokenLength <= 4) return 1;
+  if (tokenLength <= 8) return 2;
+  return 3;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const prev = new Array(b.length + 1).fill(0);
+  const curr = new Array(b.length + 1).fill(0);
+
+  for (let j = 0; j <= b.length; j += 1) {
+    prev[j] = j;
+  }
+
+  for (let i = 1; i <= a.length; i += 1) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const substitutionCost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + substitutionCost
+      );
+    }
+
+    for (let j = 0; j <= b.length; j += 1) {
+      prev[j] = curr[j];
+    }
+  }
+
+  return prev[b.length];
+}
+
+function findClosestDictionaryWord(token: string, dictionaryWords: string[]): string | null {
+  const maxDistance = getMaxTypoDistance(token.length);
+  let bestWord: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidate of dictionaryWords) {
+    if (!candidate || candidate === token) continue;
+    if (Math.abs(candidate.length - token.length) > maxDistance) continue;
+    if (candidate[0] !== token[0]) continue;
+
+    const distance = levenshteinDistance(token, candidate);
+    if (distance === 0 || distance > maxDistance) continue;
+
+    const normalizedDistance = distance / Math.max(token.length, candidate.length);
+    if (normalizedDistance > 0.36) continue;
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestWord = candidate;
+    }
+  }
+
+  return bestWord;
+}
+
+function detectTypoCorrection(
+  input: string,
+  dictionaryWords: string[],
+  dictionaryLookup: Set<string>
+): TypoCorrectionResult | null {
+  const normalized = normalizeLooseInput(input);
+  if (!normalized) return null;
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  const replacements: Array<{ from: string; to: string }> = [];
+  const correctedTokens = tokens.map((token) => {
+    if (token.length < 3 || token.length > 24) return token;
+    if (SMALL_TALK_TOKENS.has(token)) return token;
+    if (dictionaryLookup.has(token)) return token;
+
+    const suggestion = findClosestDictionaryWord(token, dictionaryWords);
+    if (!suggestion) return token;
+
+    replacements.push({ from: token, to: suggestion });
+    return suggestion;
+  });
+
+  if (replacements.length === 0) return null;
+
+  if (replacements.length > Math.ceil(tokens.length * 0.65)) {
+    return null;
+  }
+
+  return {
+    correctedInput: correctedTokens.join(" "),
+    replacements,
+  };
+}
+
+function detectDirectPageIntent(input: string): { path: string; label: string } | null {
+  const token = normalizeLooseInput(input);
+  if (!token || token.includes(" ")) return null;
+
+  if (token === "events" || token === "event") return { path: "/events", label: "Events" };
+  if (token === "fests" || token === "fest") return { path: "/fests", label: "Fests" };
+  if (token === "discover") return { path: "/Discover", label: "Discover" };
+  if (token === "profile" || token === "account") return { path: "/profile", label: "Profile" };
+  if (token === "manage") return { path: "/manage", label: "Manage" };
+  if (token === "masteradmin" || token === "admin") return { path: "/masteradmin", label: "Master Admin" };
+  if (token === "auth" || token === "signin" || token === "login") return { path: "/auth", label: "Sign In" };
+  if (token === "support") return { path: "/support", label: "Support" };
+  if (token === "contact") return { path: "/contact", label: "Contact" };
+  if (token === "pricing") return { path: "/pricing", label: "Pricing" };
+  if (token === "faq") return { path: "/faq", label: "FAQ" };
+  if (token === "privacy") return { path: "/privacy", label: "Privacy" };
+  if (token === "terms") return { path: "/terms", label: "Terms" };
+  if (token === "cookies" || token === "cookie") return { path: "/cookies", label: "Cookies" };
+  if (token === "about") return { path: "/about", label: "About" };
+  if (token === "home" || token === "dashboard") return { path: "/", label: "Home" };
+
+  return null;
+}
+
+function getLowSignalLocalReply(input: string, pathname: string): string | null {
+  const normalized = normalizeLooseInput(input);
+
+  if (!normalized) {
+    return "I am online and ready. Ask me anything about SOCIO, events, fests, or support.";
+  }
+
+  if (/^(start|menu|options)$/.test(normalized)) {
+    return HELP_MESSAGE;
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length !== 1) {
+    return null;
+  }
+
+  const token = tokens[0];
+  if (SMALL_TALK_TOKENS.has(token)) {
+    const pageHint = pathname ? ` You are currently on ${pathname}.` : "";
+    return `Hi! I am SocioAssist and I am ready to help.${pageHint} Ask me about events, fests, registrations, founders, support, or any general question.`;
+  }
+
+  if (isLikelyNonsenseToken(token)) {
+    return "I got your message. Share a little more context and I will help instantly. Example: 'show upcoming events' or 'who are Socio co-founders'.";
+  }
+
+  return null;
+}
+
+function inferSocioKnowledgeTarget(input: string, origin: string): { url: string; query: string; label: string } | null {
+  const lower = input.toLowerCase();
+  const hasWebsiteTopicCue = /(co[-\s]?founder|founders?|about us|mission|story|timeline|contact|faq|support|privacy|terms|cookies|pricing|what is socio|about socio)/.test(lower);
+  const hasSocioCue = /\bsocio\b|this (site|website|platform|app)|your (site|website|platform|app)/.test(lower) || hasWebsiteTopicCue;
+  if (!hasSocioCue) return null;
+
+  const base = origin.replace(/\/$/, "");
+
+  if (/(co[-\s]?founder|founders?|who (created|made|built)|team|lead developer)/.test(lower)) {
+    return {
+      url: `${base}/about/team`,
+      query: "co founders founders team",
+      label: "About Team",
+    };
+  }
+
+  if (/(mission|vision|purpose|values)/.test(lower)) {
+    return {
+      url: `${base}/about/mission`,
+      query: "mission values purpose",
+      label: "Mission",
+    };
+  }
+
+  if (/(story|journey|timeline|how .* started)/.test(lower)) {
+    return {
+      url: `${base}/about/story`,
+      query: "story timeline journey",
+      label: "About Story",
+    };
+  }
+
+  if (/(contact|email|phone|call|reach|support number)/.test(lower)) {
+    return {
+      url: `${base}/contact`,
+      query: "contact email phone support",
+      label: "Contact",
+    };
+  }
+
+  if (/(faq|frequently asked|common question)/.test(lower)) {
+    return {
+      url: `${base}/faq`,
+      query: "frequently asked questions",
+      label: "FAQ",
+    };
+  }
+
+  if (/(support|help center|report issue|submit idea)/.test(lower)) {
+    return {
+      url: `${base}/support`,
+      query: "support help center",
+      label: "Support",
+    };
+  }
+
+  if (/(privacy|personal data|delete data|data rights)/.test(lower)) {
+    return {
+      url: `${base}/privacy`,
+      query: "privacy data rights deletion",
+      label: "Privacy",
+    };
+  }
+
+  if (/(terms|conditions|tos)/.test(lower)) {
+    return {
+      url: `${base}/terms`,
+      query: "terms conditions",
+      label: "Terms",
+    };
+  }
+
+  if (/(cookie|tracking)/.test(lower)) {
+    return {
+      url: `${base}/cookies`,
+      query: "cookies tracking",
+      label: "Cookies",
+    };
+  }
+
+  if (/(pricing|price|plan|subscription|cost)/.test(lower)) {
+    return {
+      url: `${base}/pricing`,
+      query: "pricing plans cost",
+      label: "Pricing",
+    };
+  }
+
+  if (/(what is socio|about socio|what does socio do)/.test(lower)) {
+    return {
+      url: `${base}/about`,
+      query: "what is socio platform",
+      label: "About",
+    };
+  }
+
+  return null;
 }
 
 function renderInlineFormattedText(text: string): React.ReactNode[] {
@@ -579,6 +943,10 @@ function getUserFacingErrorMessage(error: unknown): string {
     return raw;
   }
 
+  if (lower.includes("message is required")) {
+    return "Please type at least one word and I will respond instantly.";
+  }
+
   if (
     lower.includes("high usage") ||
     lower.includes("temporarily unavailable") ||
@@ -588,7 +956,7 @@ function getUserFacingErrorMessage(error: unknown): string {
     return "AI assistant is temporarily unavailable due to high usage. Please try again later.";
   }
 
-  return UNKNOWN_ANSWER_MESSAGE;
+  return "I hit a temporary issue while generating that answer. Please rephrase your question and I will try again.";
 }
 
 function detectNavigationCommand(input: string): { path: string; label: string } | null {
@@ -634,16 +1002,28 @@ function extractFocusQuery(input: string, url?: string): string {
 }
 
 function buildWebReply(data: WebFetchResponse): string {
-  const lines = [
-    `Live fetch complete from: ${data.title}`,
-    data.summary,
-  ];
+  const highlights = Array.isArray(data.highlights)
+    ? data.highlights.map((entry) => entry.trim()).filter(Boolean)
+    : [];
 
-  if (data.description && !data.summary.toLowerCase().includes(data.description.toLowerCase())) {
-    lines.splice(1, 0, `Overview: ${data.description}`);
+  if (highlights.length > 0) {
+    return highlights.join("\n\n");
   }
 
-  lines.push(`Source: ${data.url}`);
+  const lines: string[] = [];
+
+  if (data.description && !data.summary.toLowerCase().includes(data.description.toLowerCase())) {
+    lines.push(data.description.trim());
+  }
+
+  if (data.summary?.trim()) {
+    lines.push(data.summary.trim());
+  }
+
+  if (lines.length === 0) {
+    return "I fetched that page successfully, but I could not extract enough readable details yet.";
+  }
+
   return lines.join("\n\n");
 }
 
@@ -678,6 +1058,25 @@ export default function ChatBot() {
     }
     return map;
   }, [inbuiltPromptQA]);
+  const typoDictionaryWords = useMemo(() => {
+    const words = new Set<string>(BASE_TYPO_DICTIONARY_WORDS);
+    for (const prompt of quickPrompts) {
+      const promptWords = normalizeLooseInput(prompt)
+        .split(" ")
+        .map((word) => word.trim())
+        .filter((word) => word.length >= 3 && word.length <= 24);
+
+      for (const word of promptWords) {
+        words.add(word);
+      }
+    }
+
+    return Array.from(words);
+  }, [quickPrompts]);
+  const typoDictionaryLookup = useMemo(
+    () => new Set<string>(typoDictionaryWords),
+    [typoDictionaryWords]
+  );
   const isTyping = isStreaming;
 
   const asked = messages.filter((m) => m.role === "user").map((m) => m.content);
@@ -844,6 +1243,21 @@ export default function ChatBot() {
       return HELP_MESSAGE;
     }
 
+    const lowSignalReply = getLowSignalLocalReply(trimmed, pathname);
+    if (lowSignalReply) {
+      return lowSignalReply;
+    }
+
+    const directPageTarget = detectDirectPageIntent(trimmed);
+    if (directPageTarget) {
+      if (directPageTarget.path === pathname) {
+        return `You're already on the ${directPageTarget.label} page.`;
+      }
+
+      router.push(directPageTarget.path);
+      return `Opening ${directPageTarget.label} now. Tell me what you want to do next on that page.`;
+    }
+
     const navTarget = detectNavigationCommand(trimmed);
     if (navTarget) {
       if (navTarget.path === pathname) {
@@ -865,6 +1279,16 @@ export default function ChatBot() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not fetch webpage content right now.";
         return `I tried to fetch that page but hit an issue: ${message} Please verify the URL and try again.`;
+      }
+    }
+
+    const websiteTarget = inferSocioKnowledgeTarget(trimmed, window.location.origin);
+    if (websiteTarget) {
+      try {
+        const data = await fetchWebSummary(websiteTarget.url, websiteTarget.query);
+        return buildWebReply(data);
+      } catch (error) {
+        console.error("Website knowledge fetch failed:", error);
       }
     }
 
@@ -1207,7 +1631,63 @@ export default function ChatBot() {
         setActiveFlow(null);
       }
 
-      const localReply = await generateLocalReply(trimmed);
+      const typoCorrection = detectTypoCorrection(
+        trimmed,
+        typoDictionaryWords,
+        typoDictionaryLookup
+      );
+      const normalizedOriginalInput = normalizeLooseInput(trimmed);
+      let correctedInput = typoCorrection?.correctedInput || trimmed;
+      const normalizedCorrectedInput = normalizeLooseInput(correctedInput);
+      const shouldCanonicalizeGreeting = SMALL_TALK_TOKENS.has(normalizedCorrectedInput);
+
+      if (shouldCanonicalizeGreeting) {
+        correctedInput = "hi";
+      }
+
+      const shouldAnnounceTypo = Boolean(
+        typoCorrection && normalizedOriginalInput !== normalizeLooseInput(correctedInput)
+      );
+
+      if (shouldAnnounceTypo) {
+        await appendAssistantMessage(
+          `Did you mean "${correctedInput}"? I will use that and help you now.`,
+          false
+        );
+      }
+
+      const correctedInbuiltEntry = inbuiltPromptMap.get(normalizePromptForMatch(correctedInput));
+      if (correctedInbuiltEntry) {
+        const chunks = splitIntoProgressiveChunks(correctedInbuiltEntry.answer);
+        if (chunks.length === 0) {
+          setActiveFlow(null);
+          await appendAssistantMessage(UNKNOWN_ANSWER_MESSAGE, false);
+          return;
+        }
+
+        const firstChunkMessage = formatProgressiveChunkMessage(
+          correctedInbuiltEntry.question,
+          chunks[0],
+          0,
+          chunks.length
+        );
+
+        if (chunks.length > 1) {
+          setActiveFlow({
+            question: correctedInbuiltEntry.question,
+            chunks,
+            nextChunkIndex: 1,
+            followUps: correctedInbuiltEntry.followUps || [],
+          });
+        } else {
+          setActiveFlow(null);
+        }
+
+        await appendAssistantMessage(firstChunkMessage);
+        return;
+      }
+
+      const localReply = await generateLocalReply(correctedInput);
       if (localReply) {
         await appendAssistantMessage(localReply);
         return;
@@ -1226,13 +1706,13 @@ export default function ChatBot() {
       }
 
       try {
-        await streamChatReply(trimmed, history);
+        await streamChatReply(correctedInput, history);
       } catch (streamError) {
         if (streamError instanceof Error && streamError.name === "AbortError") {
           return;
         }
 
-        const fallbackReply = await requestChatReply(trimmed, history);
+        const fallbackReply = await requestChatReply(correctedInput, history);
         await appendAssistantMessage(fallbackReply);
       }
     } catch (error) {
