@@ -1281,7 +1281,18 @@ export default function ChatBot() {
                   </svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-sm">SocioAssist</p>
+                  <TextType
+                    as="p"
+                    text="SocioAssist"
+                    typingSpeed={42}
+                    deletingSpeed={24}
+                    pauseDuration={600}
+                    loop={false}
+                    showCursor
+                    cursorCharacter="_"
+                    cursorClassName="text-cyan-100"
+                    className="font-semibold text-sm leading-none"
+                  />
                   <p className="text-[11px] text-blue-100 flex items-center gap-1.5">
                     <span className={`inline-block h-1.5 w-1.5 rounded-full ${isTyping || isThinking ? "bg-amber-300 animate-pulse" : "bg-emerald-300"}`} />
                     {isThinking ? "Thinking..." : isTyping ? "Streaming..." : "Quick Help Online"}
